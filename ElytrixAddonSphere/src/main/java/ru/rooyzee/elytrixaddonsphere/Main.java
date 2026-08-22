@@ -29,11 +29,6 @@ public final class Main extends AbstractAddon {
         AnimationRegistry.INSTANCE.unregister(new SpacedNameKey(ANIMATION_KEY));
     }
 
-    /**
-     * Копирует дефолтный sphereAnimation.yml в animations/sphere/,
-     * если его там ещё нет. Ошибка копирования не отключает аддон —
-     * анимация умеет работать на встроенных значениях по умолчанию.
-     */
     private void saveDefaultAnimationFile() {
         Plugin plugin = getPlugin();
         try {

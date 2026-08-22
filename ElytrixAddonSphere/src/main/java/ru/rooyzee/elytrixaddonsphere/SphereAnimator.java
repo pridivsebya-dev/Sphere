@@ -33,20 +33,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * Анимация открытия кейса «сфера» (elytrix:sphere).
- *
- * Фазы:
- *  1. SPAWN    — призы каскадом вылетают из центра блока на точки сферы;
- *  2. ROTATE   — сфера вращается по двум осям с замедлением и сжатием,
- *                каркас из частиц рисуется с задержкой (эффект шлейфа);
- *  3. COLLAPSE — сфера схлопывается в центр, остаётся только победитель;
- *  4. HOLD     — победитель держится в центре, затем выдаётся приз.
- *
- * Все тайминги и визуальные параметры настраиваются в sphereAnimation.yml.
- * Любое отсутствующее поле конфига заменяется значением по умолчанию,
- * полностью битый конфиг — не ломает анимацию.
- */
 public class SphereAnimator extends AbstractAnimation {
 
     private final Prize winner;
@@ -61,11 +47,8 @@ public class SphereAnimator extends AbstractAnimation {
     private final List<VirtualItem> activeItems = new ArrayList<>();
     private VirtualItem winnerItem;
 
-    /** Счётчик тиков для периодических эффектов (аура предметов). */
     private int tickCounter;
 
-    // Состояние конца фазы вращения — используется фазой сжатия,
-    // чтобы переход между фазами был без малейшего скачка.
     private double endAngleX = 0.0D;
     private double endAngleY = 0.0D;
     private double endRadius;
@@ -91,8 +74,6 @@ public class SphereAnimator extends AbstractAnimation {
             try {
                 return ((Pair<Config, ?>) v.decode(Config.CODEC).getOrThrow()).getFirst();
             } catch (Throwable t) {
-                // Битый или неполный конфиг не должен ломать анимацию —
-                // откатываемся на значения по умолчанию.
                 return new Config();
             }
         }, new Config());
@@ -130,7 +111,8 @@ public class SphereAnimator extends AbstractAnimation {
         double[] bz = new double[count];
         buildSpherePoints(count, bx, by, bz);
 
-        int[][] edges = buildEdges(bx, by, bz, count);
+        int neighbors = (count == 12) ? 5 : Math.min(4, count - 1);
+        int[][] edges = buildEdges(bx, by, bz, count, neighbors);
 
         List<VirtualItem> items = new ArrayList<>(count);
 
@@ -176,55 +158,34 @@ public class SphereAnimator extends AbstractAnimation {
     public void onInteract(PlayerInteractEvent event) {
     }
 
-    // ── SPHERE POINTS: UV-структура для симметрии ──────────
-
     private void buildSpherePoints(int count, double[] outX, double[] outY, double[] outZ) {
-        if (count == 16) {
-            buildUVSphere16(outX, outY, outZ);
+        if (count == 12) {
+            buildIcosahedron(outX, outY, outZ);
             return;
         }
         buildFibonacciSphere(count, outX, outY, outZ);
     }
 
-    /**
-     * Строит 16 точек как 4 горизонтальных кольца по 4 точки.
-     * Кольца расположены на широтах, кратных 30° от экватора.
-     * Каждое кольцо повёрнуто на 45° относительно соседнего для минимизации "полос".
-     */
-    private void buildUVSphere16(double[] outX, double[] outY, double[] outZ) {
-        double[] latitudes = {60.0D, 20.0D, -20.0D, -60.0D};
-        int pointsPerRing = 4;
-
-        int idx = 0;
-        for (int ring = 0; ring < latitudes.length; ring++) {
-            double latRad = Math.toRadians(latitudes[ring]);
-            double y = Math.sin(latRad);
-            double ringRadius = Math.cos(latRad);
-
-            double phaseOffset = (ring % 2 == 0) ? 0.0D : Math.PI / pointsPerRing;
-
-            for (int p = 0; p < pointsPerRing; p++) {
-                double phi = (2.0D * Math.PI * p) / pointsPerRing + phaseOffset;
-                outX[idx] = ringRadius * Math.cos(phi);
-                outY[idx] = y;
-                outZ[idx] = ringRadius * Math.sin(phi);
-                idx++;
-            }
+    private void buildIcosahedron(double[] outX, double[] outY, double[] outZ) {
+        double phi = (1.0D + Math.sqrt(5.0D)) / 2.0D;
+        double norm = Math.sqrt(1.0D + phi * phi);
+        double[][] v = {
+                {0.0D, 1.0D, phi}, {0.0D, 1.0D, -phi}, {0.0D, -1.0D, phi}, {0.0D, -1.0D, -phi},
+                {1.0D, phi, 0.0D}, {1.0D, -phi, 0.0D}, {-1.0D, phi, 0.0D}, {-1.0D, -phi, 0.0D},
+                {phi, 0.0D, 1.0D}, {-phi, 0.0D, 1.0D}, {phi, 0.0D, -1.0D}, {-phi, 0.0D, -1.0D}
+        };
+        for (int i = 0; i < 12; i++) {
+            outX[i] = v[i][0] / norm;
+            outY[i] = v[i][1] / norm;
+            outZ[i] = v[i][2] / norm;
         }
     }
 
     private void buildFibonacciSphere(int count, double[] outX, double[] outY, double[] outZ) {
-        if (count == 1) {
-            outX[0] = 0.0D;
-            outY[0] = 1.0D;
-            outZ[0] = 0.0D;
-            return;
-        }
-
         double golden = Math.PI * (3.0D - Math.sqrt(5.0D));
         for (int i = 0; i < count; i++) {
-            double y = 1.0D - (2.0D * i) / (count - 1.0D);
-            double r = Math.sqrt(1.0D - y * y);
+            double y = 1.0D - (2.0D * (i + 0.5D)) / count;
+            double r = Math.sqrt(Math.max(0.0D, 1.0D - y * y));
             double theta = golden * i;
 
             outX[i] = Math.cos(theta) * r;
@@ -233,22 +194,18 @@ public class SphereAnimator extends AbstractAnimation {
         }
     }
 
-    // ── spawn ──────────────────────────────────────────────
-
     private VirtualItem spawnItem(Prize prize, Vec3d target) throws InterruptedException {
         VirtualItem item = VirtualItem.create();
         item.setItem(prize.itemStack());
         item.setPos(center);
         item.setNoGravity(true);
-        // Достаточно одного пакета обнуления скорости: сущность виртуальная,
-        // гравитация выключена, позицию полностью ведёт сервер.
         item.setNoMotion();
 
         trackEntity(item);
         activeItems.add(item);
 
         boolean named = applyName(item);
-        item.setCustomNameVisible(named);
+        item.setCustomNameVisible(named && config.showItemNames);
 
         int steps = config.timings.spawnSteps;
         for (int s = 1; s <= steps; s++) {
@@ -267,11 +224,10 @@ public class SphereAnimator extends AbstractAnimation {
         return item;
     }
 
-    // ── rotation ───────────────────────────────────────────
-
     private void rotate(List<VirtualItem> items, double[] bx, double[] by, double[] bz, int[][] edges) throws InterruptedException {
         int count = items.size();
         int ticks = config.timings.rotationTicks;
+        int drawPeriod = config.timings.wireframePeriod;
 
         double maxAngularSpeed = Math.min(config.rotationSpeed,
                 Math.toDegrees(0.3D / Math.max(0.5D, config.radius)));
@@ -340,12 +296,12 @@ public class SphereAnimator extends AbstractAnimation {
                 drawIndex = (historyIndex + 1) % historySize;
             }
 
-            drawWireframe(historyX[drawIndex], historyY[drawIndex], historyZ[drawIndex], edges);
+            if (tick % drawPeriod == 0) {
+                drawWireframe(historyX[drawIndex], historyY[drawIndex], historyZ[drawIndex], edges);
+            }
 
             historyIndex = (historyIndex + 1) % historySize;
 
-            // Запоминаем фактическое состояние конца тика, чтобы
-            // следующая фаза продолжила ровно с этого же места.
             endAngleX = angleX;
             endAngleY = angleY;
             endRadius = currentRadius;
@@ -354,10 +310,9 @@ public class SphereAnimator extends AbstractAnimation {
         }
     }
 
-    // ── finish (симметричное сжатие) ───────────────────────
-
     private void finish(List<VirtualItem> items, double[] bx, double[] by, double[] bz, int[][] edges) throws InterruptedException {
         int count = items.size();
+        int drawPeriod = config.timings.wireframePeriod;
 
         double radX = Math.toRadians(endAngleX);
         double radY = Math.toRadians(endAngleY);
@@ -381,7 +336,6 @@ public class SphereAnimator extends AbstractAnimation {
 
                 Vec3d pos;
                 if (item == winnerItem) {
-                    // Победитель летит в центр из своей текущей позиции.
                     rotatePoint(bx[i], by[i], bz[i], endRadius, cosX, sinX, cosY, sinY, buf);
                     Vec3d start = new Vec3d(center.x + buf[0], center.y + buf[1], center.z + buf[2]);
                     pos = lerpVec(start, center, t);
@@ -398,8 +352,9 @@ public class SphereAnimator extends AbstractAnimation {
                 pz[i] = pos.z;
             }
 
-            // Каркас сжимается вместе с предметами.
-            drawWireframe(px, py, pz, edges);
+            if (step % drawPeriod == 0) {
+                drawWireframe(px, py, pz, edges);
+            }
             drawItemAura(items);
 
             sleepTicks(1L);
@@ -427,8 +382,6 @@ public class SphereAnimator extends AbstractAnimation {
         removeAndForget(winnerItem);
         winnerItem = null;
     }
-
-    // ── wireframe & aura ───────────────────────────────────
 
     private void drawWireframe(double[] posX, double[] posY, double[] posZ, int[][] edges) {
         for (int[] edge : edges) {
@@ -465,11 +418,6 @@ public class SphereAnimator extends AbstractAnimation {
         }
     }
 
-    /**
-     * Аура вокруг предметов (опция particleItems).
-     * Раз в itemAuraPeriod тиков выпускает по одной частице у каждого предмета.
-     * itemAuraPeriod = 0 отключает ауру.
-     */
     private void drawItemAura(List<VirtualItem> items) {
         if (config.timings.itemAuraPeriod <= 0) return;
         if (tickCounter++ % config.timings.itemAuraPeriod != 0) return;
@@ -486,10 +434,8 @@ public class SphereAnimator extends AbstractAnimation {
         }
     }
 
-    // ── edges ──────────────────────────────────────────────
-
-    private int[][] buildEdges(double[] bx, double[] by, double[] bz, int count) {
-        int neighborsPerPoint = Math.min(4, count - 1);
+    private int[][] buildEdges(double[] bx, double[] by, double[] bz, int count, int neighbors) {
+        int neighborsPerPoint = Math.min(neighbors, count - 1);
 
         Set<Long> edgeSet = new HashSet<>();
         List<int[]> edgeList = new ArrayList<>();
@@ -521,16 +467,9 @@ public class SphereAnimator extends AbstractAnimation {
         return edgeList.toArray(new int[0][]);
     }
 
-    // ── item names ─────────────────────────────────────────
-
-    /** Метод Paper ItemMeta#displayName(), резолвится один раз. */
     private static Method paperDisplayName;
     private static boolean paperDisplayNameResolved;
 
-    /**
-     * Устанавливает имя приза над предметом.
-     * Возвращает true, если имя удалось установить.
-     */
     private boolean applyName(VirtualItem item) {
         try {
             ItemStack stack = item.getItem();
@@ -592,7 +531,6 @@ public class SphereAnimator extends AbstractAnimation {
         return m;
     }
 
-    /** Конвертирует строку с legacy-кодами '§' в adventure Component. */
     private static Component legacyToComponent(String legacy) {
         if (legacy == null || legacy.isEmpty()) return null;
 
@@ -647,9 +585,6 @@ public class SphereAnimator extends AbstractAnimation {
         return parent.append(c);
     }
 
-    // ── utils ──────────────────────────────────────────────
-
-    /** Поворот базовой точки сферы на заданные углы (X, затем Y). */
     private static void rotatePoint(double bx, double by, double bz, double radius,
                                     double cosX, double sinX, double cosY, double sinY,
                                     double[] out) {
@@ -727,12 +662,10 @@ public class SphereAnimator extends AbstractAnimation {
         return Math.max(0, Math.min(255, v));
     }
 
-    // ── config ─────────────────────────────────────────────
-
     private static class Config {
         public static final Codec<Config> CODEC = RecordCodecBuilder.create(i -> i.group(
                 Codec.DOUBLE.optionalFieldOf("radius", 2.5D).forGetter(v -> v.radius),
-                Codec.INT.optionalFieldOf("itemCount", 16).forGetter(v -> v.itemCount),
+                Codec.INT.optionalFieldOf("itemCount", 12).forGetter(v -> v.itemCount),
                 Codec.DOUBLE.optionalFieldOf("shrink", 0.78D).forGetter(v -> v.shrink),
                 Codec.DOUBLE.optionalFieldOf("rotationSpeed", 3.0D).forGetter(v -> v.rotationSpeed),
                 Codec.STRING.optionalFieldOf("particleVector", "REDSTONE").forGetter(v -> v.particleVector),
@@ -740,6 +673,7 @@ public class SphereAnimator extends AbstractAnimation {
                 Codec.INT.optionalFieldOf("red", 255).forGetter(v -> v.red),
                 Codec.INT.optionalFieldOf("green", 105).forGetter(v -> v.green),
                 Codec.INT.optionalFieldOf("blue", 180).forGetter(v -> v.blue),
+                Codec.BOOLEAN.optionalFieldOf("showItemNames", true).forGetter(v -> v.showItemNames),
                 Timings.CODEC.optionalFieldOf("timings", new Timings()).forGetter(v -> v.timings)
         ).apply(i, Config::new));
 
@@ -752,11 +686,12 @@ public class SphereAnimator extends AbstractAnimation {
         final int red;
         final int green;
         final int blue;
+        final boolean showItemNames;
         final Timings timings;
 
         Config(double radius, int itemCount, double shrink, double rotationSpeed,
                String particleVector, String particleItems, int red, int green, int blue,
-               Timings timings) {
+               boolean showItemNames, Timings timings) {
             this.radius = clamp(radius, 0.5D, 8.0D);
             this.itemCount = (int) clamp(itemCount, 4, 64);
             this.shrink = clamp(shrink, 0.3D, 0.95D);
@@ -766,11 +701,12 @@ public class SphereAnimator extends AbstractAnimation {
             this.red = red;
             this.green = green;
             this.blue = blue;
+            this.showItemNames = showItemNames;
             this.timings = timings == null ? new Timings() : timings;
         }
 
         Config() {
-            this(2.5D, 16, 0.78D, 3.0D, "REDSTONE", "REDSTONE", 255, 105, 180, new Timings());
+            this(2.5D, 12, 0.78D, 3.0D, "REDSTONE", "REDSTONE", 255, 105, 180, true, new Timings());
         }
 
         private static double clamp(double v, double min, double max) {
@@ -778,7 +714,6 @@ public class SphereAnimator extends AbstractAnimation {
         }
     }
 
-    /** Тайминги и параметры эффектов — вложенная секция settings.timings. */
     private static class Timings {
         public static final Codec<Timings> CODEC = RecordCodecBuilder.create(i -> i.group(
                 Codec.INT.optionalFieldOf("rotationTicks", 160).forGetter(v -> v.rotationTicks),
@@ -788,6 +723,7 @@ public class SphereAnimator extends AbstractAnimation {
                 Codec.INT.optionalFieldOf("wireframeDelayTicks", 3).forGetter(v -> v.wireframeDelayTicks),
                 Codec.DOUBLE.optionalFieldOf("wireframeStep", 0.5D).forGetter(v -> v.wireframeStep),
                 Codec.DOUBLE.optionalFieldOf("wireframeIndent", 0.35D).forGetter(v -> v.wireframeIndent),
+                Codec.INT.optionalFieldOf("wireframePeriod", 1).forGetter(v -> v.wireframePeriod),
                 Codec.INT.optionalFieldOf("itemAuraPeriod", 0).forGetter(v -> v.itemAuraPeriod),
                 Codec.STRING.optionalFieldOf("spawnSound", "BLOCK_FIRE_EXTINGUISH").forGetter(v -> v.spawnSound),
                 Codec.STRING.optionalFieldOf("winSound", "ENTITY_EXPERIENCE_ORB_PICKUP").forGetter(v -> v.winSound)
@@ -800,13 +736,14 @@ public class SphereAnimator extends AbstractAnimation {
         final int wireframeDelayTicks;
         final double wireframeStep;
         final double wireframeIndent;
+        final int wireframePeriod;
         final int itemAuraPeriod;
         final String spawnSound;
         final String winSound;
 
         Timings(int rotationTicks, int spawnSteps, int finalCollapseTicks, int finalHoldTicks,
                 int wireframeDelayTicks, double wireframeStep, double wireframeIndent,
-                int itemAuraPeriod, String spawnSound, String winSound) {
+                int wireframePeriod, int itemAuraPeriod, String spawnSound, String winSound) {
             this.rotationTicks = (int) clamp(rotationTicks, 10, 1200);
             this.spawnSteps = (int) clamp(spawnSteps, 1, 20);
             this.finalCollapseTicks = (int) clamp(finalCollapseTicks, 1, 200);
@@ -814,13 +751,14 @@ public class SphereAnimator extends AbstractAnimation {
             this.wireframeDelayTicks = (int) clamp(wireframeDelayTicks, 1, 20);
             this.wireframeStep = clamp(wireframeStep, 0.15D, 2.0D);
             this.wireframeIndent = clamp(wireframeIndent, 0.0D, 2.0D);
+            this.wireframePeriod = (int) clamp(wireframePeriod, 1, 10);
             this.itemAuraPeriod = (int) clamp(itemAuraPeriod, 0, 40);
             this.spawnSound = spawnSound == null ? "BLOCK_FIRE_EXTINGUISH" : spawnSound;
             this.winSound = winSound == null ? "ENTITY_EXPERIENCE_ORB_PICKUP" : winSound;
         }
 
         Timings() {
-            this(160, 6, 20, 15, 3, 0.5D, 0.35D, 0, "BLOCK_FIRE_EXTINGUISH", "ENTITY_EXPERIENCE_ORB_PICKUP");
+            this(160, 6, 20, 15, 3, 0.5D, 0.35D, 1, 0, "BLOCK_FIRE_EXTINGUISH", "ENTITY_EXPERIENCE_ORB_PICKUP");
         }
 
         private static double clamp(double v, double min, double max) {
