@@ -210,7 +210,7 @@ public class SphereAnimator extends AbstractAnimation {
             ringRadius = baseRadius * (1.0D - 0.12D * sm);
             double swing = 0.5D - 0.5D * Math.cos((2.0D * Math.PI * t) / config.timings.swingTicks);
             tilt = tiltMax * swing;
-            double waveAmp = 0.15D * smoothStep(Math.min(1.0D, t / 15.0D));
+            double waveAmp = 0.12D * smoothStep(Math.min(1.0D, t / 15.0D));
 
             for (int i = 0; i < count; i++) {
                 items.get(i).setPos(ringPos(i, count, slot, waveAmp));
@@ -238,7 +238,7 @@ public class SphereAnimator extends AbstractAnimation {
 
             ringRadius = startRadius * (1.0D - 0.86D * sm);
             tilt = startTilt * (1.0D - sm);
-            double waveAmp = 0.15D * (ringRadius / startRadius);
+            double waveAmp = 0.12D * (ringRadius / startRadius);
 
             for (int i = 0; i < count; i++) {
                 items.get(i).setPos(ringPos(i, count, slot, waveAmp));
@@ -568,7 +568,7 @@ public class SphereAnimator extends AbstractAnimation {
                 Codec.DOUBLE.optionalFieldOf("radius", 2.5D).forGetter(v -> v.radius),
                 Codec.INT.optionalFieldOf("itemCount", 10).forGetter(v -> v.itemCount),
                 Codec.DOUBLE.optionalFieldOf("rotationSpeed", 7.0D).forGetter(v -> v.rotationSpeed),
-                Codec.DOUBLE.optionalFieldOf("precession", 30.0D).forGetter(v -> v.precession),
+                Codec.DOUBLE.optionalFieldOf("precession", 18.0D).forGetter(v -> v.precession),
                 Codec.DOUBLE.optionalFieldOf("height", 1.2D).forGetter(v -> v.height),
                 Codec.STRING.optionalFieldOf("particleVector", "REDSTONE").forGetter(v -> v.particleVector),
                 Codec.STRING.optionalFieldOf("particleItems", "REDSTONE").forGetter(v -> v.particleItems),
@@ -607,7 +607,7 @@ public class SphereAnimator extends AbstractAnimation {
         }
 
         Config() {
-            this(2.5D, 10, 7.0D, 30.0D, 1.2D, "REDSTONE", "REDSTONE", 255, 105, 180, new Timings());
+            this(2.5D, 10, 7.0D, 18.0D, 1.2D, "REDSTONE", "REDSTONE", 255, 105, 180, new Timings());
         }
 
         private static double clamp(double v, double min, double max) {
@@ -621,7 +621,7 @@ public class SphereAnimator extends AbstractAnimation {
                 Codec.INT.optionalFieldOf("ascentGap", 2).forGetter(v -> v.ascentGap),
                 Codec.INT.optionalFieldOf("orbitTicks", 150).forGetter(v -> v.orbitTicks),
                 Codec.INT.optionalFieldOf("tiltCycleTicks", 160).forGetter(v -> v.tiltCycleTicks),
-                Codec.INT.optionalFieldOf("swingTicks", 140).forGetter(v -> v.swingTicks),
+                Codec.INT.optionalFieldOf("swingTicks", 160).forGetter(v -> v.swingTicks),
                 Codec.INT.optionalFieldOf("convergenceTicks", 40).forGetter(v -> v.convergenceTicks),
                 Codec.INT.optionalFieldOf("winnerTicks", 45).forGetter(v -> v.winnerTicks),
                 Codec.STRING.optionalFieldOf("spawnSound", "BLOCK_NOTE_BLOCK_PLING").forGetter(v -> v.spawnSound),
@@ -652,7 +652,7 @@ public class SphereAnimator extends AbstractAnimation {
         }
 
         Timings() {
-            this(5, 2, 150, 160, 140, 40, 45, "BLOCK_NOTE_BLOCK_PLING", "ENTITY_PLAYER_LEVELUP");
+            this(5, 2, 150, 160, 160, 40, 45, "BLOCK_NOTE_BLOCK_PLING", "ENTITY_PLAYER_LEVELUP");
         }
 
         private static double clamp(double v, double min, double max) {

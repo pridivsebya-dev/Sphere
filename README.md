@@ -14,12 +14,12 @@ cd ElytrixAddonSphere
 mvn package
 ```
 
-Готовый jar: `target/ElytrixAnimAddon-1.10.jar` (требуется JDK 17 и доступ к
+Готовый jar: `target/ElytrixAnimAddon-1.11.jar` (требуется JDK 17 и доступ к
 `repo.by1337.space` — там лежат BCases-common и VirtualEntityApi).
 
 ## Установка
 
-1. Положите `ElytrixAnimAddon-1.10.jar` в папку аддонов BCases (обычно `plugins/BCases/addons/`).
+1. Положите `ElytrixAnimAddon-1.11.jar` в папку аддонов BCases (обычно `plugins/BCases/addons/`).
 2. Перезапустите сервер — при первом запуске создастся
    `plugins/BCases/animations/sphere/sphereAnimation.yml`.
 3. Укажите анимацию `elytrix:sphere` в настройках кейса.
@@ -38,7 +38,7 @@ mvn package
 | `timings.ascentSteps` | `5` | Тиков разгона предмета при взлёте |
 | `timings.ascentGap` | `2` | Тиков между запусками предметов (каскад) |
 | `timings.orbitTicks` | `150` | Длительность основной фазы орбиты |
-| `precession` | `30` | Максимальный угол наклона орбиты, ° (0–70) — направление наклона едет по кругу |
+| `precession` | `18` | Максимальный угол наклона орбиты, ° (0–70) |
 | `timings.tiltCycleTicks` | `160` | Полный круг направления качания за N тиков (60–800) |
 | `timings.swingTicks` | `140` | Полный цикл качания «туда-обратно» за N тиков (60–600) |
 | `timings.convergenceTicks` | `40` | Длительность сжатия в вихрь |
