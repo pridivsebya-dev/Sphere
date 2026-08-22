@@ -14,12 +14,12 @@ cd ElytrixAddonSphere
 mvn package
 ```
 
-Готовый jar: `target/ElytrixAnimAddon-1.8.jar` (требуется JDK 17 и доступ к
+Готовый jar: `target/ElytrixAnimAddon-1.9.jar` (требуется JDK 17 и доступ к
 `repo.by1337.space` — там лежат BCases-common и VirtualEntityApi).
 
 ## Установка
 
-1. Положите `ElytrixAnimAddon-1.8.jar` в папку аддонов BCases (обычно `plugins/BCases/addons/`).
+1. Положите `ElytrixAnimAddon-1.9.jar` в папку аддонов BCases (обычно `plugins/BCases/addons/`).
 2. Перезапустите сервер — при первом запуске создастся
    `plugins/BCases/animations/sphere/sphereAnimation.yml`.
 3. Укажите анимацию `elytrix:sphere` в настройках кейса.
@@ -39,7 +39,7 @@ mvn package
 | `timings.ascentGap` | `2` | Тиков между запусками предметов (каскад) |
 | `timings.orbitTicks` | `150` | Длительность основной фазы орбиты |
 | `precession` | `30` | Максимальный угол наклона орбиты, ° (0–70) — направление наклона едет по кругу |
-| `timings.tiltCycleTicks` | `80` | Полный круг направления наклона за N тиков (эффект волчка) |
+| `timings.tiltCycleTicks` | `160` | Полный круг направления наклона за N тиков (60–800) — эффект волчка |
 | `timings.convergenceTicks` | `40` | Длительность сжатия в вихрь |
 | `timings.winnerTicks` | `45` | Длительность показа победителя |
 | `timings.spawnSound` | `BLOCK_NOTE_BLOCK_PLING` | Звук запуска предмета |

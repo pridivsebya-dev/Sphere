@@ -640,7 +640,7 @@ public class SphereAnimator extends AbstractAnimation {
             this.ascentSteps = (int) clamp(ascentSteps, 2, 15);
             this.ascentGap = (int) clamp(ascentGap, 1, 5);
             this.orbitTicks = (int) clamp(orbitTicks, 20, 1200);
-            this.tiltCycleTicks = (int) clamp(tiltCycleTicks, 30, 400);
+            this.tiltCycleTicks = (int) clamp(tiltCycleTicks, 60, 800);
             this.convergenceTicks = (int) clamp(convergenceTicks, 10, 200);
             this.winnerTicks = (int) clamp(winnerTicks, 10, 200);
             this.spawnSound = spawnSound == null ? "BLOCK_NOTE_BLOCK_PLING" : spawnSound;
@@ -648,7 +648,7 @@ public class SphereAnimator extends AbstractAnimation {
         }
 
         Timings() {
-            this(5, 2, 150, 80, 40, 45, "BLOCK_NOTE_BLOCK_PLING", "ENTITY_PLAYER_LEVELUP");
+            this(5, 2, 150, 160, 40, 45, "BLOCK_NOTE_BLOCK_PLING", "ENTITY_PLAYER_LEVELUP");
         }
 
         private static double clamp(double v, double min, double max) {
