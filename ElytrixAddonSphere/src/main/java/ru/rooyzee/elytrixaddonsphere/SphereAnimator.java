@@ -208,7 +208,7 @@ public class SphereAnimator extends AbstractAnimation {
             double sm = smoothStep(p);
 
             ringRadius = baseRadius * (1.0D - 0.12D * sm);
-            tilt = tiltMax * smoothStep(Math.min(1.0D, t / 20.0D));
+            tilt = tiltMax * smoothStep(Math.min(1.0D, t / 40.0D));
             double waveAmp = 0.15D * smoothStep(Math.min(1.0D, t / 15.0D));
 
             for (int i = 0; i < count; i++) {
@@ -619,7 +619,7 @@ public class SphereAnimator extends AbstractAnimation {
                 Codec.INT.optionalFieldOf("ascentSteps", 5).forGetter(v -> v.ascentSteps),
                 Codec.INT.optionalFieldOf("ascentGap", 2).forGetter(v -> v.ascentGap),
                 Codec.INT.optionalFieldOf("orbitTicks", 150).forGetter(v -> v.orbitTicks),
-                Codec.INT.optionalFieldOf("tiltCycleTicks", 80).forGetter(v -> v.tiltCycleTicks),
+                Codec.INT.optionalFieldOf("tiltCycleTicks", 160).forGetter(v -> v.tiltCycleTicks),
                 Codec.INT.optionalFieldOf("convergenceTicks", 40).forGetter(v -> v.convergenceTicks),
                 Codec.INT.optionalFieldOf("winnerTicks", 45).forGetter(v -> v.winnerTicks),
                 Codec.STRING.optionalFieldOf("spawnSound", "BLOCK_NOTE_BLOCK_PLING").forGetter(v -> v.spawnSound),
