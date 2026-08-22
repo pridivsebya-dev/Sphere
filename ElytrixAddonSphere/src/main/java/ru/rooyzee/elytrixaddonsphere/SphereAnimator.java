@@ -200,13 +200,15 @@ public class SphereAnimator extends AbstractAnimation {
     private void orbit(int count, List<VirtualItem> items, double[] slot) throws InterruptedException {
         int ticks = config.timings.orbitTicks;
         double baseRadius = config.radius;
+        double tiltMax = Math.toRadians(config.precession);
+        double gammaStep = (2.0D * Math.PI) / config.timings.tiltCycleTicks;
 
         for (int t = 0; t < ticks; t++) {
             double p = (double) t / ticks;
             double sm = smoothStep(p);
 
             ringRadius = baseRadius * (1.0D - 0.12D * sm);
-            tilt = (2.0D * Math.PI * t) / config.timings.tiltCycleTicks;
+            tilt = tiltMax * smoothStep(Math.min(1.0D, t / 20.0D));
             double waveAmp = 0.15D * smoothStep(Math.min(1.0D, t / 15.0D));
 
             for (int i = 0; i < count; i++) {
@@ -216,7 +218,7 @@ public class SphereAnimator extends AbstractAnimation {
             drawTrail(items);
 
             orbitAngle += Math.toRadians(config.rotationSpeed * (0.75D + 0.5D * sm));
-            gamma += Math.toRadians(0.8D);
+            gamma += gammaStep;
             wavePhase += 0.1D;
 
             sleepTicks(1L);
@@ -226,8 +228,8 @@ public class SphereAnimator extends AbstractAnimation {
     private void converge(int count, List<VirtualItem> items, double[] slot) throws InterruptedException {
         int ticks = config.timings.convergenceTicks;
         double startRadius = ringRadius;
-        double startTilt = tilt % (2.0D * Math.PI);
-        if (startTilt > Math.PI) startTilt -= 2.0D * Math.PI;
+        double startTilt = tilt;
+        double gammaStep = (2.0D * Math.PI) / config.timings.tiltCycleTicks;
 
         for (int t = 0; t < ticks; t++) {
             double p = (double) t / ticks;
@@ -244,7 +246,7 @@ public class SphereAnimator extends AbstractAnimation {
             drawTrail(items);
 
             orbitAngle += Math.toRadians(config.rotationSpeed * (1.0D + 2.2D * sm));
-            gamma += Math.toRadians(1.2D);
+            gamma += gammaStep * (1.0D + sm);
             wavePhase += 0.15D * (1.0D + sm);
 
             sleepTicks(1L);
@@ -565,6 +567,7 @@ public class SphereAnimator extends AbstractAnimation {
                 Codec.DOUBLE.optionalFieldOf("radius", 2.5D).forGetter(v -> v.radius),
                 Codec.INT.optionalFieldOf("itemCount", 10).forGetter(v -> v.itemCount),
                 Codec.DOUBLE.optionalFieldOf("rotationSpeed", 7.0D).forGetter(v -> v.rotationSpeed),
+                Codec.DOUBLE.optionalFieldOf("precession", 30.0D).forGetter(v -> v.precession),
                 Codec.DOUBLE.optionalFieldOf("height", 1.2D).forGetter(v -> v.height),
                 Codec.STRING.optionalFieldOf("particleVector", "REDSTONE").forGetter(v -> v.particleVector),
                 Codec.STRING.optionalFieldOf("particleItems", "REDSTONE").forGetter(v -> v.particleItems),
@@ -585,12 +588,13 @@ public class SphereAnimator extends AbstractAnimation {
         final int blue;
         final Timings timings;
 
-        Config(double radius, int itemCount, double rotationSpeed, double height,
+        Config(double radius, int itemCount, double rotationSpeed, double precession, double height,
                String particleVector, String particleItems, int red, int green, int blue,
                Timings timings) {
             this.radius = clamp(radius, 0.8D, 6.0D);
             this.itemCount = (int) clamp(itemCount, 4, 24);
             this.rotationSpeed = clamp(rotationSpeed, 1.0D, 20.0D);
+            this.precession = clamp(precession, 0.0D, 70.0D);
             this.height = clamp(height, 0.0D, 4.0D);
             this.particleVector = particleVector == null ? "REDSTONE" : particleVector;
             this.particleItems = particleItems == null ? "REDSTONE" : particleItems;
@@ -601,7 +605,7 @@ public class SphereAnimator extends AbstractAnimation {
         }
 
         Config() {
-            this(2.5D, 10, 7.0D, 1.2D, "REDSTONE", "REDSTONE", 255, 105, 180, new Timings());
+            this(2.5D, 10, 7.0D, 30.0D, 1.2D, "REDSTONE", "REDSTONE", 255, 105, 180, new Timings());
         }
 
         private static double clamp(double v, double min, double max) {
