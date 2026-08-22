@@ -304,34 +304,30 @@ public class SphereAnimator extends AbstractAnimation {
         Vec3d showTop = top.add(0.0D, displayY, 0.0D);
 
         Vec3d[] dir = new Vec3d[count];
-        double[] dist = new double[count];
+        double[] rise = new double[count];
         List<Integer> losers = new ArrayList<>();
         for (int i = 0; i < count; i++) {
             if (i == winnerIdx) continue;
             losers.add(i);
 
-            Vec3d s = start[i].sub(ringCenter);
-            double len = Math.sqrt(s.x * s.x + s.z * s.z);
-            double dx = len > 0.001D ? s.x / len : Math.cos(slot[i]);
-            double dz = len > 0.001D ? s.z / len : Math.sin(slot[i]);
-            double dy = ((i * 31 % 10) - 3) / 10.0D;
-
-            dir[i] = new Vec3d(dx, dy, dz);
-            dist[i] = 3.0D + (i % 5) * 0.4D;
+            double a = slot[i] + orbitAngle;
+            double drift = 0.2D + (i % 3) * 0.1D;
+            dir[i] = new Vec3d(Math.cos(a) * drift, 1.0D, Math.sin(a) * drift);
+            rise[i] = 4.5D + (i % 5) * 0.5D;
         }
 
-        int scatterTicks = 8;
-        int removalTick1 = scatterTicks;
-        int removalTick2 = scatterTicks + 1;
-        int revealTick = scatterTicks + 3;
+        int flyTicks = 10;
+        int vanishStart = 3;
+        int vanishPerTick = Math.max(1, (losers.size() + flyTicks - vanishStart - 1) / (flyTicks - vanishStart));
+        int revealTick = flyTicks + 2;
 
         for (int t = 0; t < ticks; t++) {
-            if (t <= scatterTicks) {
-                double p = (double) t / scatterTicks;
-                double e = 1.0D - (1.0D - p) * (1.0D - p);
+            if (t <= flyTicks) {
+                double p = (double) t / flyTicks;
+                double e = p * p;
 
                 for (int idx : losers) {
-                    Vec3d pos = start[idx].add(dir[idx].mul(dist[idx] * e));
+                    Vec3d pos = start[idx].add(dir[idx].mul(rise[idx] * e));
                     items.get(idx).setPos(pos);
 
                     if (nameStands[idx] != null) {
@@ -347,9 +343,8 @@ public class SphereAnimator extends AbstractAnimation {
                 }
             }
 
-            if (t == removalTick1 || t == removalTick2) {
-                int half = (losers.size() + 1) / 2;
-                for (int r = 0; r < half && !losers.isEmpty(); r++) {
+            if (t >= vanishStart && t <= flyTicks) {
+                for (int r = 0; r < vanishPerTick && !losers.isEmpty(); r++) {
                     int idx = losers.remove(0);
                     VirtualEntity loser = items.get(idx);
                     Vec3d lp = loser.getPos();
@@ -368,8 +363,8 @@ public class SphereAnimator extends AbstractAnimation {
                 burst(showTop);
             }
 
-            if (t > scatterTicks) {
-                int bt = t - scatterTicks;
+            if (t > flyTicks) {
+                int bt = t - flyTicks;
                 double ramp = Math.min(1.0D, bt / 6.0D);
                 double bob = 0.1D * Math.sin(0.13D * bt) * ramp;
                 Vec3d wpos = top.add(0.0D, bob, 0.0D);
