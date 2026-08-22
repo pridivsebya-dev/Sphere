@@ -14,12 +14,12 @@ cd ElytrixAddonSphere
 mvn package
 ```
 
-Готовый jar: `target/ElytrixAnimAddon-1.4.jar` (требуется JDK 17 и доступ к
+Готовый jar: `target/ElytrixAnimAddon-1.5.jar` (требуется JDK 17 и доступ к
 `repo.by1337.space` — там лежат BCases-common и VirtualEntityApi).
 
 ## Установка
 
-1. Положите `ElytrixAnimAddon-1.4.jar` в папку аддонов BCases (обычно `plugins/BCases/addons/`).
+1. Положите `ElytrixAnimAddon-1.5.jar` в папку аддонов BCases (обычно `plugins/BCases/addons/`).
 2. Перезапустите сервер — при первом запуске создастся
    `plugins/BCases/animations/sphere/sphereAnimation.yml`.
 3. Укажите анимацию `elytrix:sphere` в настройках кейса.
@@ -31,7 +31,7 @@ mvn package
 | `radius` | `2.5` | Радиус орбиты в блоках (0.8–6.0) |
 | `itemCount` | `10` | Предметов на орбите (4–24) |
 | `rotationSpeed` | `7.0` | Базовая скорость орбиты, °/тик (1.0–20.0) |
-| `precession` | `30` | Наклон орбиты, ° — 3D-эффект прецессии (0–70) |
+| `precession` | `30` | Максимальный наклон орбиты, ° (0–70) — орбита непрерывно наклоняется до него и обратно |
 | `height` | `1.2` | Высота орбиты над кейсом (0.0–4.0) |
 | `particleVector` | `REDSTONE` | Частицы-шлейф за предметами |
 | `particleItems` | `REDSTONE` | Частицы вокруг победителя |
@@ -40,6 +40,7 @@ mvn package
 | `timings.ascentSteps` | `5` | Тиков разгона предмета при взлёте |
 | `timings.ascentGap` | `2` | Тиков между запусками предметов (каскад) |
 | `timings.orbitTicks` | `150` | Длительность основной фазы орбиты |
+| `timings.tiltCycleTicks` | `80` | Период цикла наклона орбиты: непрерывно от 0° до `precession` и обратно |
 | `timings.convergenceTicks` | `40` | Длительность сжатия в вихрь |
 | `timings.winnerTicks` | `45` | Длительность показа победителя |
 | `timings.trailPeriod` | `2` | Шлейф раз в N тиков; `0` — выкл. |
