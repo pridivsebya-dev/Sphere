@@ -1,6 +1,0 @@
-name: ElytrixAnimAddon
-version: '1.0'
-main: ru.rooyzee.elytrixaddonsphere.Main
-author: Rooyzee
-provider: elytrix:sphere
-id: sphere
