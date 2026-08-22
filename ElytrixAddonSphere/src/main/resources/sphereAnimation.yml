@@ -1,0 +1,11 @@
+id: sphere
+provider: elytrix:sphere
+
+settings:
+  radius: 2.5
+  itemCount: 16
+  particleVector: "REDSTONE"
+  particleItems: "REDSTONE"
+  red: 255
+  green: 105
+  blue: 180
