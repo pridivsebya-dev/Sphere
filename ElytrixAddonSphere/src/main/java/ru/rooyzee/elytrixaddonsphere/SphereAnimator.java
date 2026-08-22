@@ -294,40 +294,32 @@ public class SphereAnimator extends AbstractAnimation {
     private void showcase(int count, int winnerIdx, List<VirtualEntity> items, double[] slot) throws InterruptedException {
         int ticks = config.timings.winnerTicks;
 
-        Vec3d[] start = new Vec3d[count];
-        for (int i = 0; i < count; i++) {
-            start[i] = ringPos(i, slot);
-        }
-
         Vec3d top = ringCenter.add(0.0D, -0.3D, 0.0D);
         double displayY = config.standMode ? 1.0D : 0.0D;
         Vec3d showTop = top.add(0.0D, displayY, 0.0D);
 
-        Vec3d[] dir = new Vec3d[count];
         double[] rise = new double[count];
         List<Integer> losers = new ArrayList<>();
         for (int i = 0; i < count; i++) {
             if (i == winnerIdx) continue;
             losers.add(i);
-
-            double a = slot[i] + orbitAngle;
-            double drift = 0.2D + (i % 3) * 0.1D;
-            dir[i] = new Vec3d(Math.cos(a) * drift, 1.0D, Math.sin(a) * drift);
-            rise[i] = 4.5D + (i % 5) * 0.5D;
+            rise[i] = 5.5D + (i % 5) * 0.5D;
         }
 
         int flyTicks = 10;
-        int vanishStart = 3;
+        int vanishStart = 4;
         int vanishPerTick = Math.max(1, (losers.size() + flyTicks - vanishStart - 1) / (flyTicks - vanishStart));
         int revealTick = flyTicks + 2;
 
         for (int t = 0; t < ticks; t++) {
             if (t <= flyTicks) {
                 double p = (double) t / flyTicks;
-                double e = p * p;
+                double e = p * p * p;
+
+                orbitAngle += Math.toRadians(config.rotationSpeed * 3.2D * (1.0D - p));
 
                 for (int idx : losers) {
-                    Vec3d pos = start[idx].add(dir[idx].mul(rise[idx] * e));
+                    Vec3d pos = ringPos(idx, slot).add(0.0D, rise[idx] * e, 0.0D);
                     items.get(idx).setPos(pos);
 
                     if (nameStands[idx] != null) {
@@ -335,7 +327,7 @@ public class SphereAnimator extends AbstractAnimation {
                     }
                 }
 
-                Vec3d wpos = lerpVec(start[winnerIdx], top, smoothStep(p));
+                Vec3d wpos = lerpVec(ringPos(winnerIdx, slot), top, smoothStep(p));
                 winnerItem.setPos(wpos);
 
                 if (nameStands[winnerIdx] != null) {
