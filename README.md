@@ -15,12 +15,12 @@ cd ElytrixAddonSphere
 mvn package
 ```
 
-Готовый jar: `target/ElytrixAnimAddon-1.12.jar` (требуется JDK 17 и доступ к
+Готовый jar: `target/ElytrixAnimAddon-1.13.jar` (требуется JDK 17 и доступ к
 `repo.by1337.space` — там лежат BCases-common и VirtualEntityApi).
 
 ## Установка
 
-1. Положите `ElytrixAnimAddon-1.12.jar` в папку аддонов BCases (обычно `plugins/BCases/addons/`).
+1. Положите `ElytrixAnimAddon-1.13.jar` в папку аддонов BCases (обычно `plugins/BCases/addons/`).
 2. Перезапустите сервер — при первом запуске создастся
    `plugins/BCases/animations/sphere/sphereAnimation.yml`.
 3. Укажите анимацию `elytrix:sphere` в настройках кейса.
@@ -32,7 +32,7 @@ mvn package
 | `radius` | `2.5` | Радиус орбиты в блоках (0.8–6.0) |
 | `itemCount` | `10` | Предметов на орбите (4–24) |
 | `rotationSpeed` | `7.0` | Скорость вращения по кругу, °/тик (1.0–20.0) |
-| `height` | `1.2` | Высота орбиты над кейсом (0.0–4.0) |
+| `height` | `0.35` | Высота орбиты над кейсом (0.0–4.0); предмет рендерится ~на 1 блок выше |
 | `timings.ascentSteps` | `5` | Тиков разгона предмета при взлёте |
 | `timings.ascentGap` | `2` | Тиков между запусками предметов (каскад) |
 | `timings.orbitTicks` | `150` | Длительность основной фазы вращения |

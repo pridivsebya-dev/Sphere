@@ -9,8 +9,9 @@ import dev.by1337.bc.animation.AnimationContext;
 import dev.by1337.bc.prize.Prize;
 import dev.by1337.bc.prize.PrizeSelector;
 import dev.by1337.bc.yaml.CashedYamlContext;
+import dev.by1337.virtualentity.api.entity.EquipmentSlot;
 import dev.by1337.virtualentity.api.virtual.VirtualEntity;
-import dev.by1337.virtualentity.api.virtual.item.VirtualItem;
+import dev.by1337.virtualentity.api.virtual.armorstand.VirtualArmorStand;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -37,8 +38,8 @@ public class SphereAnimator extends AbstractAnimation {
     private final Sound spawnSound;
     private final Sound winSound;
 
-    private final List<VirtualItem> activeItems = new ArrayList<>();
-    private VirtualItem winnerItem;
+    private final List<VirtualArmorStand> activeItems = new ArrayList<>();
+    private VirtualArmorStand winnerItem;
 
     private double orbitAngle = 0.0D;
     private double ringRadius;
@@ -92,7 +93,7 @@ public class SphereAnimator extends AbstractAnimation {
             slot[i] = (2.0D * Math.PI * i) / count;
         }
 
-        List<VirtualItem> items = new ArrayList<>(count);
+        List<VirtualArmorStand> items = new ArrayList<>(count);
 
         try {
             ascent(count, winnerIdx, slot, items);
@@ -120,13 +121,13 @@ public class SphereAnimator extends AbstractAnimation {
     public void onInteract(PlayerInteractEvent event) {
     }
 
-    private void ascent(int count, int winnerIdx, double[] slot, List<VirtualItem> items) throws InterruptedException {
+    private void ascent(int count, int winnerIdx, double[] slot, List<VirtualArmorStand> items) throws InterruptedException {
         int steps = config.timings.ascentSteps;
         int gap = config.timings.ascentGap;
         int total = (count - 1) * gap + steps + 1;
 
         int[] progress = new int[count];
-        VirtualItem[] spawned = new VirtualItem[count];
+        VirtualArmorStand[] spawned = new VirtualArmorStand[count];
 
         for (int t = 0; t < total; t++) {
             for (int i = 0; i < count; i++) {
@@ -134,22 +135,28 @@ public class SphereAnimator extends AbstractAnimation {
 
                 if (spawned[i] == null) {
                     Prize prize = (i == winnerIdx) ? winner : safePrize();
-                    VirtualItem item = VirtualItem.create();
-                    item.setItem(prize.itemStack());
-                    item.setPos(center);
-                    item.setNoGravity(true);
-                    item.setNoMotion();
+                    ItemStack stack = prize.itemStack();
 
-                    trackEntity(item);
-                    activeItems.add(item);
-                    items.add(item);
-                    spawned[i] = item;
+                    VirtualArmorStand stand = VirtualArmorStand.create();
+                    stand.setMarker(true);
+                    stand.setSmall(true);
+                    stand.setNoBasePlate(true);
+                    stand.setNoGravity(true);
+                    stand.setNoMotion();
+                    stand.setEquipment(EquipmentSlot.HEAD, stack);
+                    stand.setPos(center);
+                    stand.setYaw((float) Math.toDegrees(slot[i]) - 90.0F);
 
-                    boolean named = applyName(item);
-                    item.setCustomNameVisible(named);
+                    trackEntity(stand);
+                    activeItems.add(stand);
+                    items.add(stand);
+                    spawned[i] = stand;
+
+                    boolean named = applyName(stand, stack);
+                    stand.setCustomNameVisible(named);
 
                     if (i == winnerIdx) {
-                        winnerItem = item;
+                        winnerItem = stand;
                     }
 
                     float pitch = 0.55F + 0.6F * ((float) i / count);
@@ -175,7 +182,7 @@ public class SphereAnimator extends AbstractAnimation {
         }
     }
 
-    private void orbit(int count, List<VirtualItem> items, double[] slot) throws InterruptedException {
+    private void orbit(int count, List<VirtualArmorStand> items, double[] slot) throws InterruptedException {
         int ticks = config.timings.orbitTicks;
         double baseRadius = config.radius;
         double speed = Math.toRadians(config.rotationSpeed);
@@ -195,7 +202,7 @@ public class SphereAnimator extends AbstractAnimation {
         }
     }
 
-    private void converge(int count, List<VirtualItem> items, double[] slot) throws InterruptedException {
+    private void converge(int count, List<VirtualArmorStand> items, double[] slot) throws InterruptedException {
         int ticks = config.timings.convergenceTicks;
         double startRadius = ringRadius;
 
@@ -218,7 +225,7 @@ public class SphereAnimator extends AbstractAnimation {
         playSound(ringCenter, Sound.ENTITY_ENDERMAN_TELEPORT, 0.5F, 0.7F);
     }
 
-    private void showcase(int count, int winnerIdx, List<VirtualItem> items, double[] slot) throws InterruptedException {
+    private void showcase(int count, int winnerIdx, List<VirtualArmorStand> items, double[] slot) throws InterruptedException {
         int ticks = config.timings.winnerTicks;
 
         Vec3d[] start = new Vec3d[count];
@@ -227,7 +234,7 @@ public class SphereAnimator extends AbstractAnimation {
         }
 
         Vec3d top = ringCenter.add(0.0D, -0.3D, 0.0D);
-        List<VirtualItem> losers = new ArrayList<>();
+        List<VirtualArmorStand> losers = new ArrayList<>();
         for (int i = 0; i < count; i++) {
             if (i != winnerIdx) losers.add(items.get(i));
         }
@@ -248,8 +255,7 @@ public class SphereAnimator extends AbstractAnimation {
 
             if (t >= removalStart) {
                 for (int r = 0; r < removalsPerTick && !losers.isEmpty(); r++) {
-                    VirtualItem loser = losers.remove(0);
-                    removeAndForget(loser);
+                    removeAndForget(losers.remove(0));
                 }
             }
 
@@ -284,9 +290,8 @@ public class SphereAnimator extends AbstractAnimation {
     private static Method paperDisplayName;
     private static boolean paperDisplayNameResolved;
 
-    private boolean applyName(VirtualItem item) {
+    private boolean applyName(VirtualArmorStand stand, ItemStack stack) {
         try {
-            ItemStack stack = item.getItem();
             if (stack == null) return false;
             ItemMeta meta = stack.getItemMeta();
             if (meta == null) return false;
@@ -297,7 +302,7 @@ public class SphereAnimator extends AbstractAnimation {
             }
             if (name == null) return false;
 
-            item.setCustomName(name);
+            stand.setCustomName(name);
             return true;
         } catch (Throwable ignored) {
             return false;
@@ -416,7 +421,7 @@ public class SphereAnimator extends AbstractAnimation {
         return p != null ? p : winner;
     }
 
-    private void removeAndForget(VirtualItem item) {
+    private void removeAndForget(VirtualArmorStand item) {
         if (item == null) return;
         activeItems.remove(item);
         try {
@@ -426,7 +431,7 @@ public class SphereAnimator extends AbstractAnimation {
     }
 
     private void cleanup() {
-        for (VirtualItem item : new ArrayList<>(activeItems)) {
+        for (VirtualArmorStand item : new ArrayList<>(activeItems)) {
             try {
                 removeEntity(item);
             } catch (Throwable ignored) {
@@ -449,7 +454,7 @@ public class SphereAnimator extends AbstractAnimation {
                 Codec.DOUBLE.optionalFieldOf("radius", 2.5D).forGetter(v -> v.radius),
                 Codec.INT.optionalFieldOf("itemCount", 10).forGetter(v -> v.itemCount),
                 Codec.DOUBLE.optionalFieldOf("rotationSpeed", 7.0D).forGetter(v -> v.rotationSpeed),
-                Codec.DOUBLE.optionalFieldOf("height", 1.2D).forGetter(v -> v.height),
+                Codec.DOUBLE.optionalFieldOf("height", 0.35D).forGetter(v -> v.height),
                 Timings.CODEC.optionalFieldOf("timings", new Timings()).forGetter(v -> v.timings)
         ).apply(i, Config::new));
 
@@ -468,7 +473,7 @@ public class SphereAnimator extends AbstractAnimation {
         }
 
         Config() {
-            this(2.5D, 10, 7.0D, 1.2D, new Timings());
+            this(2.5D, 10, 7.0D, 0.35D, new Timings());
         }
 
         private static double clamp(double v, double min, double max) {
