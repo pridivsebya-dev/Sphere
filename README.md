@@ -18,7 +18,7 @@ mvn package
 
 ## Установка
 
-1. Положите `ElytrixAnimAddon-1.2.jar` в папку аддонов BCases (обычно `plugins/BCases/addons/`).
+1. Положите `ElytrixAnimAddon-1.3.jar` в папку аддонов BCases (обычно `plugins/BCases/addons/`).
 2. Перезапустите сервер — при первом запуске создастся
    `plugins/BCases/animations/sphere/sphereAnimation.yml`.
 3. Укажите анимацию `elytrix:sphere` в настройках кейса.
@@ -36,7 +36,7 @@ mvn package
 | `particleVector` | `REDSTONE` | Частицы каркаса; `REDSTONE` красится цветом ниже |
 | `particleItems` | `REDSTONE` | Частицы-аура предметов (вкл. через `itemAuraPeriod`) |
 | `red` / `green` / `blue` | `255/105/180` | Цвет частиц `REDSTONE` |
-| `showItemNames` | `true` | Имена предметов над ними; `false` — меньше нагрузки на клиент |
+| `showItemNames` | `1` | Имена предметов над ними (1/0); `0` — меньше нагрузки |
 | `timings.rotationTicks` | `160` | Длительность вращения в тиках |
 | `timings.spawnSteps` | `6` | Тиков полёта предмета из центра на место |
 | `timings.finalCollapseTicks` | `20` | Тиков сжатия сферы в центр |
@@ -73,7 +73,7 @@ mvn package
 
 * **TPS проседает ниже ~18–19** → не тянет сервер/хостинг. Снижайте нагрузку:
   * `timings.wireframePeriod: 2` (или 3) — каркас рисуется в 2–3 раза реже;
-  * `showItemNames: false` — убирает таблички имён (дороги в рендере клиента);
+  * `showItemNames: 0` — убирает таблички имён (дороги в рендере клиента);
   * `timings.wireframeStep: 0.7` — крупнее шаг частиц вдоль рёбер;
   * `itemCount: 12` (дефолт) — меньше предметов, меньше пакетов.
 * **TPS ровно 20, но картинка дёргается** → это клиентская сторона: FPS-просадка

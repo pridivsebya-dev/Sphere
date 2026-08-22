@@ -205,7 +205,7 @@ public class SphereAnimator extends AbstractAnimation {
         activeItems.add(item);
 
         boolean named = applyName(item);
-        item.setCustomNameVisible(named && config.showItemNames);
+        item.setCustomNameVisible(named && config.showItemNames != 0);
 
         int steps = config.timings.spawnSteps;
         for (int s = 1; s <= steps; s++) {
@@ -673,7 +673,7 @@ public class SphereAnimator extends AbstractAnimation {
                 Codec.INT.optionalFieldOf("red", 255).forGetter(v -> v.red),
                 Codec.INT.optionalFieldOf("green", 105).forGetter(v -> v.green),
                 Codec.INT.optionalFieldOf("blue", 180).forGetter(v -> v.blue),
-                Codec.BOOLEAN.optionalFieldOf("showItemNames", true).forGetter(v -> v.showItemNames),
+                Codec.INT.optionalFieldOf("showItemNames", 1).forGetter(v -> v.showItemNames),
                 Timings.CODEC.optionalFieldOf("timings", new Timings()).forGetter(v -> v.timings)
         ).apply(i, Config::new));
 
@@ -686,12 +686,12 @@ public class SphereAnimator extends AbstractAnimation {
         final int red;
         final int green;
         final int blue;
-        final boolean showItemNames;
+        final int showItemNames;
         final Timings timings;
 
         Config(double radius, int itemCount, double shrink, double rotationSpeed,
                String particleVector, String particleItems, int red, int green, int blue,
-               boolean showItemNames, Timings timings) {
+               int showItemNames, Timings timings) {
             this.radius = clamp(radius, 0.5D, 8.0D);
             this.itemCount = (int) clamp(itemCount, 4, 64);
             this.shrink = clamp(shrink, 0.3D, 0.95D);
@@ -701,12 +701,12 @@ public class SphereAnimator extends AbstractAnimation {
             this.red = red;
             this.green = green;
             this.blue = blue;
-            this.showItemNames = showItemNames;
+            this.showItemNames = showItemNames != 0 ? 1 : 0;
             this.timings = timings == null ? new Timings() : timings;
         }
 
         Config() {
-            this(2.5D, 12, 0.78D, 3.0D, "REDSTONE", "REDSTONE", 255, 105, 180, true, new Timings());
+            this(2.5D, 12, 0.78D, 3.0D, "REDSTONE", "REDSTONE", 255, 105, 180, 1, new Timings());
         }
 
         private static double clamp(double v, double min, double max) {

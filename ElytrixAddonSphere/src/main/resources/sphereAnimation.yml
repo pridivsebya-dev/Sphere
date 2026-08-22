@@ -22,8 +22,8 @@ settings:
   # Частицы-аура вокруг предметов (работает при timings.itemAuraPeriod > 0).
   particleItems: "REDSTONE"
 
-  # Показывать имена предметов над ними (false = меньше нагрузки на клиент)
-  showItemNames: true
+  # Показывать имена предметов над ними: 1 = да, 0 = нет (0 = меньше нагрузки на клиент)
+  showItemNames: 1
 
   # Цвет частиц REDSTONE (RGB)
   red: 255
