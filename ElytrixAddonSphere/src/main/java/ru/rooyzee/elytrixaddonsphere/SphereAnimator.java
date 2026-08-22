@@ -580,6 +580,7 @@ public class SphereAnimator extends AbstractAnimation {
         final double radius;
         final int itemCount;
         final double rotationSpeed;
+        final double precession;
         final double height;
         final String particleVector;
         final String particleItems;
