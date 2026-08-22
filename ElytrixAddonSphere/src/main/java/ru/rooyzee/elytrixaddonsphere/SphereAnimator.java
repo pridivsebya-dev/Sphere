@@ -11,7 +11,7 @@ import dev.by1337.bc.prize.PrizeSelector;
 import dev.by1337.bc.yaml.CashedYamlContext;
 import dev.by1337.virtualentity.api.entity.EquipmentSlot;
 import dev.by1337.virtualentity.api.virtual.VirtualEntity;
-import dev.by1337.virtualentity.api.virtual.armorstand.VirtualArmorStand;
+import dev.by1337.virtualentity.api.virtual.decoration.VirtualArmorStand;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
