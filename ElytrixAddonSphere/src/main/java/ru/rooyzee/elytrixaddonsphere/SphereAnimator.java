@@ -13,6 +13,7 @@ import dev.by1337.virtualentity.api.entity.EquipmentSlot;
 import dev.by1337.virtualentity.api.virtual.VirtualEntity;
 import dev.by1337.virtualentity.api.virtual.decoration.VirtualArmorStand;
 import dev.by1337.virtualentity.api.virtual.item.VirtualItem;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Color;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
@@ -38,14 +39,12 @@ public class SphereAnimator extends AbstractAnimation {
 
     private final List<VirtualEntity> activeItems = new ArrayList<>();
     private VirtualEntity winnerItem;
+    private VirtualEntity[] nameStands;
 
     private double orbitAngle = 0.0D;
     private double ringRadius;
-    private double wavePhase = 0.0D;
-
-    private int trailTick;
-    private int swirlTick;
     private double swirlAngle = 0.0D;
+    private int swirlTick;
 
     public SphereAnimator(
             CaseBlock caseBlock,
@@ -107,6 +106,7 @@ public class SphereAnimator extends AbstractAnimation {
         }
 
         List<VirtualEntity> items = new ArrayList<>(count);
+        nameStands = new VirtualEntity[count];
 
         try {
             ascent(count, winnerIdx, slot, items);
@@ -163,10 +163,31 @@ public class SphereAnimator extends AbstractAnimation {
         return item;
     }
 
+    private VirtualEntity spawnNameStand(Prize prize, Vec3d pos) {
+        Component name = prize.displayNameComponent();
+        if (name == null) return null;
+
+        VirtualArmorStand stand = VirtualArmorStand.create();
+        stand.setMarker(true);
+        stand.setSmall(true);
+        stand.setNoBasePlate(true);
+        stand.setNoGravity(true);
+        stand.setInvisible(true);
+        stand.setNoMotion();
+        stand.setCustomName(name);
+        stand.setCustomNameVisible(true);
+        stand.setPos(pos);
+        trackEntity(stand);
+        activeItems.add(stand);
+        return stand;
+    }
+
     private void ascent(int count, int winnerIdx, double[] slot, List<VirtualEntity> items) throws InterruptedException {
         int steps = config.timings.ascentSteps;
         int gap = config.timings.ascentGap;
         int total = (count - 1) * gap + steps + 1;
+
+        Vec3d hidden = center.add(0.0D, -6.0D, 0.0D);
 
         int[] progress = new int[count];
         VirtualEntity[] spawned = new VirtualEntity[count];
@@ -178,8 +199,12 @@ public class SphereAnimator extends AbstractAnimation {
                 if (spawned[i] == null) {
                     Prize prize = (i == winnerIdx) ? winner : safePrize();
                     float yaw = (float) Math.toDegrees(slot[i]) - 90.0F;
-                    spawned[i] = spawnDisplay(prize, center, yaw);
+                    spawned[i] = spawnDisplay(prize, hidden, yaw);
                     items.add(spawned[i]);
+
+                    if (config.standMode) {
+                        nameStands[i] = spawnNameStand(prize, hidden);
+                    }
 
                     if (i == winnerIdx) {
                         winnerItem = spawned[i];
@@ -198,11 +223,16 @@ public class SphereAnimator extends AbstractAnimation {
                 double r = config.radius * k;
                 double y = config.height * k + 0.1D * Math.sin(Math.PI * k);
 
-                spawned[i].setPos(new Vec3d(
+                Vec3d pos = new Vec3d(
                         center.x + Math.cos(ang) * r,
                         center.y + y,
                         center.z + Math.sin(ang) * r
-                ));
+                );
+                spawned[i].setPos(pos);
+
+                if (nameStands[i] != null) {
+                    nameStands[i].setPos(pos.add(0.0D, config.nameOffset, 0.0D));
+                }
             }
             sleepTicks(1L);
         }
@@ -215,16 +245,19 @@ public class SphereAnimator extends AbstractAnimation {
 
         for (int t = 0; t < ticks; t++) {
             ringRadius = baseRadius * (1.0D - 0.10D * smoothStep((double) t / ticks));
-            double waveAmp = 0.12D * smoothStep(Math.min(1.0D, t / 10.0D));
 
             for (int i = 0; i < count; i++) {
-                items.get(i).setPos(ringPos(i, count, slot, waveAmp));
+                Vec3d pos = ringPos(i, slot);
+                items.get(i).setPos(pos);
+
+                if (nameStands[i] != null) {
+                    nameStands[i].setPos(pos.add(0.0D, config.nameOffset, 0.0D));
+                }
             }
 
-            drawTrail(items);
+            drawItemSwirl(items, slot);
 
             orbitAngle += speed;
-            wavePhase += 0.1D;
 
             sleepTicks(1L);
         }
@@ -238,16 +271,19 @@ public class SphereAnimator extends AbstractAnimation {
             double sm = smoothStep((double) t / ticks);
 
             ringRadius = startRadius * (1.0D - 0.86D * sm);
-            double waveAmp = 0.12D * (ringRadius / startRadius);
 
             for (int i = 0; i < count; i++) {
-                items.get(i).setPos(ringPos(i, count, slot, waveAmp));
+                Vec3d pos = ringPos(i, slot);
+                items.get(i).setPos(pos);
+
+                if (nameStands[i] != null) {
+                    nameStands[i].setPos(pos.add(0.0D, config.nameOffset, 0.0D));
+                }
             }
 
-            drawTrail(items);
+            drawItemSwirl(items, slot);
 
             orbitAngle += Math.toRadians(config.rotationSpeed * (1.0D + 2.2D * sm));
-            wavePhase += 0.15D * (1.0D + sm);
 
             sleepTicks(1L);
         }
@@ -260,13 +296,13 @@ public class SphereAnimator extends AbstractAnimation {
 
         Vec3d[] start = new Vec3d[count];
         for (int i = 0; i < count; i++) {
-            start[i] = ringPos(i, count, slot, 0.0D);
+            start[i] = ringPos(i, slot);
         }
 
         Vec3d top = ringCenter.add(0.0D, -0.3D, 0.0D);
-        List<VirtualEntity> losers = new ArrayList<>();
+        List<Integer> losers = new ArrayList<>();
         for (int i = 0; i < count; i++) {
-            if (i != winnerIdx) losers.add(items.get(i));
+            if (i != winnerIdx) losers.add(i);
         }
 
         int gatherTicks = 3;
@@ -276,18 +312,33 @@ public class SphereAnimator extends AbstractAnimation {
         for (int t = 0; t < ticks; t++) {
             if (t <= gatherTicks) {
                 double k = smoothStep((double) t / gatherTicks);
-                for (int i = 0; i < count; i++) {
-                    if (i == winnerIdx) continue;
-                    items.get(i).setPos(lerpVec(start[i], ringCenter, k));
+                for (int idx : losers) {
+                    Vec3d pos = lerpVec(start[idx], ringCenter, k);
+                    items.get(idx).setPos(pos);
+
+                    if (nameStands[idx] != null) {
+                        nameStands[idx].setPos(pos.add(0.0D, config.nameOffset, 0.0D));
+                    }
                 }
-                winnerItem.setPos(lerpVec(start[winnerIdx], top, k));
+                Vec3d wpos = lerpVec(start[winnerIdx], top, k);
+                winnerItem.setPos(wpos);
+
+                if (nameStands[winnerIdx] != null) {
+                    nameStands[winnerIdx].setPos(wpos.add(0.0D, config.nameOffset, 0.0D));
+                }
             }
 
             if (t >= removalStart) {
                 for (int r = 0; r < removalsPerTick && !losers.isEmpty(); r++) {
-                    VirtualEntity loser = losers.remove(0);
+                    int idx = losers.remove(0);
+                    VirtualEntity loser = items.get(idx);
                     poof(loser.getPos());
                     removeAndForget(loser);
+
+                    if (nameStands[idx] != null) {
+                        removeAndForget(nameStands[idx]);
+                        nameStands[idx] = null;
+                    }
                 }
             }
 
@@ -300,7 +351,12 @@ public class SphereAnimator extends AbstractAnimation {
                 int bt = t - gatherTicks;
                 double ramp = Math.min(1.0D, bt / 6.0D);
                 double bob = 0.1D * Math.sin(0.13D * bt) * ramp;
-                winnerItem.setPos(top.add(0.0D, bob, 0.0D));
+                Vec3d wpos = top.add(0.0D, bob, 0.0D);
+                winnerItem.setPos(wpos);
+
+                if (nameStands[winnerIdx] != null) {
+                    nameStands[winnerIdx].setPos(wpos.add(0.0D, config.nameOffset, 0.0D));
+                }
                 drawSwirl(top);
             }
 
@@ -309,28 +365,44 @@ public class SphereAnimator extends AbstractAnimation {
 
         removeAndForget(winnerItem);
         winnerItem = null;
+
+        if (nameStands[winnerIdx] != null) {
+            removeAndForget(nameStands[winnerIdx]);
+            nameStands[winnerIdx] = null;
+        }
     }
 
-    private Vec3d ringPos(int i, int count, double[] slot, double waveAmp) {
+    private Vec3d ringPos(int i, double[] slot) {
         double ang = slot[i] + orbitAngle;
-        double y = waveAmp * Math.sin(wavePhase + (2.0D * Math.PI * i) / count);
         return new Vec3d(
                 ringCenter.x + Math.cos(ang) * ringRadius,
-                ringCenter.y + y,
+                ringCenter.y,
                 ringCenter.z + Math.sin(ang) * ringRadius
         );
     }
 
-    private void drawTrail(List<VirtualEntity> items) {
-        if (trailTick++ % 2 != 0) return;
+    private void drawItemSwirl(List<VirtualEntity> items, double[] slot) {
+        if (swirlTick++ % 2 != 0) return;
+        swirlAngle += 0.6D;
 
-        for (VirtualEntity item : items) {
-            Vec3d pos = item.getPos();
+        double baseY = config.standMode ? 1.0D : 0.15D;
+
+        for (int i = 0; i < items.size(); i++) {
+            Vec3d pos = items.get(i).getPos();
             if (pos == null) continue;
-            if (isRedstone(trailParticle)) {
-                spawnParticle(Particle.REDSTONE, pos, 0, 0.0D, 0.0D, 0.0D, 0.0D, dustOptions);
-            } else {
-                spawnParticle(trailParticle, pos, 0, 0.0D, 0.0D, 0.0D, 0.0D);
+
+            for (int k = 0; k < 2; k++) {
+                double a = swirlAngle + slot[i] + k * Math.PI;
+                Vec3d point = pos.add(
+                        Math.cos(a) * 0.4D,
+                        baseY + 0.12D * Math.sin(2.0D * a),
+                        Math.sin(a) * 0.4D
+                );
+                if (isRedstone(trailParticle)) {
+                    spawnParticle(Particle.REDSTONE, point, 0, 0.0D, 0.0D, 0.0D, 0.0D, dustOptions);
+                } else {
+                    spawnParticle(trailParticle, point, 0, 0.0D, 0.0D, 0.0D, 0.0D);
+                }
             }
         }
     }
@@ -436,6 +508,7 @@ public class SphereAnimator extends AbstractAnimation {
                 Codec.DOUBLE.optionalFieldOf("rotationSpeed", 7.0D).forGetter(v -> v.rotationSpeed),
                 Codec.DOUBLE.optionalFieldOf("height", 0.35D).forGetter(v -> v.height),
                 Codec.STRING.optionalFieldOf("displayMode", "STAND").forGetter(v -> v.displayMode),
+                Codec.DOUBLE.optionalFieldOf("nameOffset", 1.15D).forGetter(v -> v.nameOffset),
                 Codec.STRING.optionalFieldOf("particleVector", "REDSTONE").forGetter(v -> v.particleVector),
                 Codec.STRING.optionalFieldOf("particleItems", "REDSTONE").forGetter(v -> v.particleItems),
                 Codec.INT.optionalFieldOf("red", 255).forGetter(v -> v.red),
@@ -450,6 +523,7 @@ public class SphereAnimator extends AbstractAnimation {
         final double height;
         final String displayMode;
         final boolean standMode;
+        final double nameOffset;
         final String particleVector;
         final String particleItems;
         final int red;
@@ -458,7 +532,7 @@ public class SphereAnimator extends AbstractAnimation {
         final Timings timings;
 
         Config(double radius, int itemCount, double rotationSpeed, double height,
-               String displayMode, String particleVector, String particleItems,
+               String displayMode, double nameOffset, String particleVector, String particleItems,
                int red, int green, int blue, Timings timings) {
             this.radius = clamp(radius, 0.8D, 6.0D);
             this.itemCount = (int) clamp(itemCount, 4, 24);
@@ -466,6 +540,7 @@ public class SphereAnimator extends AbstractAnimation {
             this.height = clamp(height, 0.0D, 4.0D);
             this.displayMode = displayMode == null ? "STAND" : displayMode;
             this.standMode = !this.displayMode.trim().equalsIgnoreCase("ITEM");
+            this.nameOffset = clamp(nameOffset, 0.0D, 3.0D);
             this.particleVector = particleVector == null ? "REDSTONE" : particleVector;
             this.particleItems = particleItems == null ? "REDSTONE" : particleItems;
             this.red = red;
@@ -475,7 +550,7 @@ public class SphereAnimator extends AbstractAnimation {
         }
 
         Config() {
-            this(2.5D, 10, 7.0D, 0.35D, "STAND", "REDSTONE", "REDSTONE", 255, 105, 180, new Timings());
+            this(2.5D, 10, 7.0D, 0.35D, "STAND", 1.15D, "REDSTONE", "REDSTONE", 255, 105, 180, new Timings());
         }
 
         private static double clamp(double v, double min, double max) {
