@@ -302,27 +302,44 @@ public class SphereAnimator extends AbstractAnimation {
         Vec3d top = ringCenter.add(0.0D, -0.3D, 0.0D);
         double displayY = config.standMode ? 1.0D : 0.0D;
         Vec3d showTop = top.add(0.0D, displayY, 0.0D);
+
+        Vec3d[] dir = new Vec3d[count];
+        double[] dist = new double[count];
         List<Integer> losers = new ArrayList<>();
         for (int i = 0; i < count; i++) {
-            if (i != winnerIdx) losers.add(i);
+            if (i == winnerIdx) continue;
+            losers.add(i);
+
+            Vec3d s = start[i].sub(ringCenter);
+            double len = Math.sqrt(s.x * s.x + s.z * s.z);
+            double dx = len > 0.001D ? s.x / len : Math.cos(slot[i]);
+            double dz = len > 0.001D ? s.z / len : Math.sin(slot[i]);
+            double dy = ((i * 31 % 10) - 3) / 10.0D;
+
+            dir[i] = new Vec3d(dx, dy, dz);
+            dist[i] = 3.0D + (i % 5) * 0.4D;
         }
 
-        int gatherTicks = 3;
-        int removalStart = gatherTicks + 1;
-        int removalsPerTick = 4;
+        int scatterTicks = 8;
+        int removalTick1 = scatterTicks;
+        int removalTick2 = scatterTicks + 1;
+        int revealTick = scatterTicks + 3;
 
         for (int t = 0; t < ticks; t++) {
-            if (t <= gatherTicks) {
-                double k = smoothStep((double) t / gatherTicks);
+            if (t <= scatterTicks) {
+                double p = (double) t / scatterTicks;
+                double e = 1.0D - (1.0D - p) * (1.0D - p);
+
                 for (int idx : losers) {
-                    Vec3d pos = lerpVec(start[idx], ringCenter, k);
+                    Vec3d pos = start[idx].add(dir[idx].mul(dist[idx] * e));
                     items.get(idx).setPos(pos);
 
                     if (nameStands[idx] != null) {
                         nameStands[idx].setPos(pos.add(0.0D, config.nameOffset, 0.0D));
                     }
                 }
-                Vec3d wpos = lerpVec(start[winnerIdx], top, k);
+
+                Vec3d wpos = lerpVec(start[winnerIdx], top, smoothStep(p));
                 winnerItem.setPos(wpos);
 
                 if (nameStands[winnerIdx] != null) {
@@ -330,8 +347,9 @@ public class SphereAnimator extends AbstractAnimation {
                 }
             }
 
-            if (t >= removalStart) {
-                for (int r = 0; r < removalsPerTick && !losers.isEmpty(); r++) {
+            if (t == removalTick1 || t == removalTick2) {
+                int half = (losers.size() + 1) / 2;
+                for (int r = 0; r < half && !losers.isEmpty(); r++) {
                     int idx = losers.remove(0);
                     VirtualEntity loser = items.get(idx);
                     Vec3d lp = loser.getPos();
@@ -345,13 +363,13 @@ public class SphereAnimator extends AbstractAnimation {
                 }
             }
 
-            if (t == removalStart + 2) {
+            if (t == revealTick) {
                 playSound(top, winSound, 0.8F, 1.0F);
                 burst(showTop);
             }
 
-            if (t > gatherTicks) {
-                int bt = t - gatherTicks;
+            if (t > scatterTicks) {
+                int bt = t - scatterTicks;
                 double ramp = Math.min(1.0D, bt / 6.0D);
                 double bob = 0.1D * Math.sin(0.13D * bt) * ramp;
                 Vec3d wpos = top.add(0.0D, bob, 0.0D);
