@@ -25,21 +25,19 @@ import org.by1337.blib.geom.Vec3d;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 
 public class SphereAnimator extends AbstractAnimation {
 
     private final Prize winner;
     private final Config config;
     private final Vec3d center;
+    private final Vec3d ringCenter;
+    private final Particle trailParticle;
     private final Particle itemParticle;
-    private final Particle vectorParticle;
     private final Particle.DustOptions dustOptions;
     private final Sound spawnSound;
     private final Sound winSound;
@@ -47,11 +45,15 @@ public class SphereAnimator extends AbstractAnimation {
     private final List<VirtualItem> activeItems = new ArrayList<>();
     private VirtualItem winnerItem;
 
-    private int tickCounter;
+    private double orbitAngle = 0.0D;
+    private double gamma = 0.0D;
+    private double ringRadius;
+    private double tilt = 0.0D;
+    private double wavePhase = 0.0D;
 
-    private double endAngleX = 0.0D;
-    private double endAngleY = 0.0D;
-    private double endRadius;
+    private int trailTick;
+    private int swirlTick;
+    private double swirlAngle = 0.0D;
 
     public SphereAnimator(
             CaseBlock caseBlock,
@@ -78,7 +80,8 @@ public class SphereAnimator extends AbstractAnimation {
             }
         }, new Config());
 
-        this.endRadius = this.config.radius;
+        this.ringRadius = this.config.radius;
+        this.ringCenter = this.center.add(0.0D, this.config.height, 0.0D);
 
         this.dustOptions = new Particle.DustOptions(
                 Color.fromRGB(
@@ -86,13 +89,13 @@ public class SphereAnimator extends AbstractAnimation {
                         clamp(this.config.green),
                         clamp(this.config.blue)
                 ),
-                0.4F
+                0.5F
         );
 
+        this.trailParticle = parseParticle(this.config.particleVector, Particle.FLAME);
         this.itemParticle = parseParticle(this.config.particleItems, Particle.FLAME);
-        this.vectorParticle = parseParticle(this.config.particleVector, Particle.FLAME);
-        this.spawnSound = parseSound(this.config.timings.spawnSound, Sound.BLOCK_FIRE_EXTINGUISH);
-        this.winSound = parseSound(this.config.timings.winSound, Sound.ENTITY_EXPERIENCE_ORB_PICKUP);
+        this.spawnSound = parseSound(this.config.timings.spawnSound, Sound.BLOCK_NOTE_BLOCK_PLING);
+        this.winSound = parseSound(this.config.timings.winSound, Sound.ENTITY_PLAYER_LEVELUP);
     }
 
     @Override
@@ -103,40 +106,21 @@ public class SphereAnimator extends AbstractAnimation {
 
     @Override
     protected void animate() throws InterruptedException {
-        int count = Math.max(4, Math.min(64, config.itemCount));
+        int count = Math.max(4, Math.min(24, config.itemCount));
         int winnerIdx = RANDOM.nextInt(count);
 
-        double[] bx = new double[count];
-        double[] by = new double[count];
-        double[] bz = new double[count];
-        buildSpherePoints(count, bx, by, bz);
-
-        int neighbors = (count == 12) ? 5 : Math.min(4, count - 1);
-        int[][] edges = buildEdges(bx, by, bz, count, neighbors);
+        double[] slot = new double[count];
+        for (int i = 0; i < count; i++) {
+            slot[i] = (2.0D * Math.PI * i) / count;
+        }
 
         List<VirtualItem> items = new ArrayList<>(count);
 
         try {
-            for (int i = 0; i < count; i++) {
-                Prize prize = (i == winnerIdx) ? winner : safePrize();
-                Vec3d target = center.add(new Vec3d(
-                        bx[i] * config.radius,
-                        by[i] * config.radius,
-                        bz[i] * config.radius
-                ));
-
-                VirtualItem item = spawnItem(prize, target);
-                items.add(item);
-
-                if (i == winnerIdx) {
-                    winnerItem = item;
-                }
-
-                sleepTicks(1L);
-            }
-
-            rotate(items, bx, by, bz, edges);
-            finish(items, bx, by, bz, edges);
+            ascent(count, winnerIdx, slot, items);
+            orbit(count, items, slot);
+            converge(count, items, slot);
+            showcase(count, winnerIdx, items, slot);
         } finally {
             cleanup();
         }
@@ -158,224 +142,165 @@ public class SphereAnimator extends AbstractAnimation {
     public void onInteract(PlayerInteractEvent event) {
     }
 
-    private void buildSpherePoints(int count, double[] outX, double[] outY, double[] outZ) {
-        if (count == 12) {
-            buildIcosahedron(outX, outY, outZ);
-            return;
+    private void ascent(int count, int winnerIdx, double[] slot, List<VirtualItem> items) throws InterruptedException {
+        int steps = config.timings.ascentSteps;
+        int gap = config.timings.ascentGap;
+        int total = (count - 1) * gap + steps;
+
+        int[] progress = new int[count];
+        VirtualItem[] spawned = new VirtualItem[count];
+
+        for (int t = 0; t < total; t++) {
+            for (int i = 0; i < count; i++) {
+                if (t < i * gap) continue;
+
+                if (spawned[i] == null) {
+                    Prize prize = (i == winnerIdx) ? winner : safePrize();
+                    VirtualItem item = VirtualItem.create();
+                    item.setItem(prize.itemStack());
+                    item.setPos(center);
+                    item.setNoGravity(true);
+                    item.setNoMotion();
+
+                    trackEntity(item);
+                    activeItems.add(item);
+                    items.add(item);
+                    spawned[i] = item;
+
+                    boolean named = applyName(item);
+                    item.setCustomNameVisible(named && config.showItemNames != 0);
+
+                    if (i == winnerIdx) {
+                        winnerItem = item;
+                    }
+
+                    float pitch = 0.55F + 0.6F * ((float) i / count);
+                    playSound(center, spawnSound, 0.3F, pitch);
+                }
+
+                progress[i]++;
+                if (progress[i] > steps) continue;
+
+                double k = smoothStep((double) progress[i] / steps);
+                double ang = slot[i] - 0.9D * (1.0D - k);
+                double r = config.radius * k;
+                double y = config.height * k + 0.1D * Math.sin(Math.PI * k);
+
+                spawned[i].setPos(new Vec3d(
+                        center.x + Math.cos(ang) * r,
+                        center.y + y,
+                        center.z + Math.sin(ang) * r
+                ));
+            }
+            sleepTicks(1L);
         }
-        buildFibonacciSphere(count, outX, outY, outZ);
     }
 
-    private void buildIcosahedron(double[] outX, double[] outY, double[] outZ) {
-        double phi = (1.0D + Math.sqrt(5.0D)) / 2.0D;
-        double norm = Math.sqrt(1.0D + phi * phi);
-        double[][] v = {
-                {0.0D, 1.0D, phi}, {0.0D, 1.0D, -phi}, {0.0D, -1.0D, phi}, {0.0D, -1.0D, -phi},
-                {1.0D, phi, 0.0D}, {1.0D, -phi, 0.0D}, {-1.0D, phi, 0.0D}, {-1.0D, -phi, 0.0D},
-                {phi, 0.0D, 1.0D}, {-phi, 0.0D, 1.0D}, {phi, 0.0D, -1.0D}, {-phi, 0.0D, -1.0D}
-        };
-        for (int i = 0; i < 12; i++) {
-            outX[i] = v[i][0] / norm;
-            outY[i] = v[i][1] / norm;
-            outZ[i] = v[i][2] / norm;
+    private void orbit(int count, List<VirtualItem> items, double[] slot) throws InterruptedException {
+        int ticks = config.timings.orbitTicks;
+        double baseRadius = config.radius;
+        double tiltMax = Math.toRadians(config.precession);
+
+        for (int t = 0; t < ticks; t++) {
+            double p = (double) t / ticks;
+            double sm = smoothStep(p);
+
+            ringRadius = baseRadius * (1.0D - 0.12D * sm);
+            tilt = tiltMax * smoothStep(Math.min(1.0D, t / 20.0D));
+            double waveAmp = 0.15D * smoothStep(Math.min(1.0D, t / 15.0D));
+
+            for (int i = 0; i < count; i++) {
+                items.get(i).setPos(ringPos(i, count, slot, waveAmp));
+            }
+
+            drawTrail(items);
+
+            orbitAngle += Math.toRadians(config.rotationSpeed * (0.75D + 0.5D * sm));
+            gamma += Math.toRadians(0.8D);
+            wavePhase += 0.1D;
+
+            sleepTicks(1L);
         }
     }
 
-    private void buildFibonacciSphere(int count, double[] outX, double[] outY, double[] outZ) {
-        double golden = Math.PI * (3.0D - Math.sqrt(5.0D));
+    private void converge(int count, List<VirtualItem> items, double[] slot) throws InterruptedException {
+        int ticks = config.timings.convergenceTicks;
+        double startRadius = ringRadius;
+        double startTilt = tilt;
+
+        for (int t = 0; t < ticks; t++) {
+            double p = (double) t / ticks;
+            double sm = smoothStep(p);
+
+            ringRadius = startRadius * (1.0D - 0.86D * sm);
+            tilt = startTilt * (1.0D - sm);
+            double waveAmp = 0.15D * (ringRadius / startRadius);
+
+            for (int i = 0; i < count; i++) {
+                items.get(i).setPos(ringPos(i, count, slot, waveAmp));
+            }
+
+            drawTrail(items);
+
+            orbitAngle += Math.toRadians(config.rotationSpeed * (1.0D + 2.2D * sm));
+            gamma += Math.toRadians(1.2D);
+            wavePhase += 0.15D * (1.0D + sm);
+
+            sleepTicks(1L);
+        }
+
+        playSound(ringCenter, Sound.ENTITY_ENDERMAN_TELEPORT, 0.5F, 0.7F);
+    }
+
+    private void showcase(int count, int winnerIdx, List<VirtualItem> items, double[] slot) throws InterruptedException {
+        int ticks = config.timings.winnerTicks;
+
+        Vec3d[] start = new Vec3d[count];
         for (int i = 0; i < count; i++) {
-            double y = 1.0D - (2.0D * (i + 0.5D)) / count;
-            double r = Math.sqrt(Math.max(0.0D, 1.0D - y * y));
-            double theta = golden * i;
-
-            outX[i] = Math.cos(theta) * r;
-            outY[i] = y;
-            outZ[i] = Math.sin(theta) * r;
-        }
-    }
-
-    private VirtualItem spawnItem(Prize prize, Vec3d target) throws InterruptedException {
-        VirtualItem item = VirtualItem.create();
-        item.setItem(prize.itemStack());
-        item.setPos(center);
-        item.setNoGravity(true);
-        item.setNoMotion();
-
-        trackEntity(item);
-        activeItems.add(item);
-
-        boolean named = applyName(item);
-        item.setCustomNameVisible(named && config.showItemNames != 0);
-
-        int steps = config.timings.spawnSteps;
-        for (int s = 1; s <= steps; s++) {
-            double t = smoothStep((double) s / steps);
-            Vec3d pos = lerpVec(center, target, t);
-            item.setPos(pos);
-            item.lookAt(center);
-            sleepTicks(1L);
+            start[i] = ringPos(i, count, slot, 0.0D);
         }
 
-        item.setPos(target);
-        item.lookAt(center);
+        Vec3d top = ringCenter.add(0.0D, 0.45D, 0.0D);
+        List<VirtualItem> losers = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            if (i != winnerIdx) losers.add(items.get(i));
+        }
 
-        float pitch = 0.9F + RANDOM.nextFloat() * 0.5F;
-        playSound(target, spawnSound, 0.2F, pitch);
-        return item;
-    }
+        int gatherTicks = 4;
+        int removalStart = gatherTicks + 1;
+        int removalsPerTick = 2;
 
-    private void rotate(List<VirtualItem> items, double[] bx, double[] by, double[] bz, int[][] edges) throws InterruptedException {
-        int count = items.size();
-        int ticks = config.timings.rotationTicks;
-        int drawPeriod = config.timings.wireframePeriod;
-
-        double maxAngularSpeed = Math.min(config.rotationSpeed,
-                Math.toDegrees(0.3D / Math.max(0.5D, config.radius)));
-
-        double angleX = 0.0D;
-        double angleY = 0.0D;
-
-        int historySize = config.timings.wireframeDelayTicks + 1;
-        double[][] historyX = new double[historySize][count];
-        double[][] historyY = new double[historySize][count];
-        double[][] historyZ = new double[historySize][count];
-        int historyIndex = 0;
-        boolean historyFilled = false;
-
-        for (int tick = 0; tick < ticks; tick++) {
-            double progress = (double) tick / ticks;
-            double smooth = smoothStep(progress);
-
-            double speedX = maxAngularSpeed * (1.0D - 0.55D * smooth);
-            double speedY = maxAngularSpeed * 0.75D * (1.0D - 0.55D * smooth);
-            angleX += speedX;
-            angleY += speedY;
-
-            double radX = Math.toRadians(angleX);
-            double radY = Math.toRadians(angleY);
-            double cosX = Math.cos(radX);
-            double sinX = Math.sin(radX);
-            double cosY = Math.cos(radY);
-            double sinY = Math.sin(radY);
-
-            double currentRadius = config.radius * (1.0D - (1.0D - config.shrink) * smooth);
-
-            for (int i = 0; i < count; i++) {
-                double px = bx[i] * currentRadius;
-                double py = by[i] * currentRadius;
-                double pz = bz[i] * currentRadius;
-
-                double y1 = py * cosX - pz * sinX;
-                double z1 = py * sinX + pz * cosX;
-
-                double x2 = px * cosY + z1 * sinY;
-                double z2 = -px * sinY + z1 * cosY;
-
-                double finalX = center.x + x2;
-                double finalY = center.y + y1;
-                double finalZ = center.z + z2;
-
-                historyX[historyIndex][i] = finalX;
-                historyY[historyIndex][i] = finalY;
-                historyZ[historyIndex][i] = finalZ;
-
-                VirtualItem item = items.get(i);
-                item.setPos(new Vec3d(finalX, finalY, finalZ));
-                item.lookAt(center);
-            }
-
-            drawItemAura(items);
-
-            int drawIndex;
-            if (!historyFilled) {
-                drawIndex = 0;
-                if (tick >= config.timings.wireframeDelayTicks) {
-                    historyFilled = true;
+        for (int t = 0; t < ticks; t++) {
+            if (t <= gatherTicks) {
+                double k = smoothStep((double) t / gatherTicks);
+                for (int i = 0; i < count; i++) {
+                    if (i == winnerIdx) continue;
+                    items.get(i).setPos(lerpVec(start[i], ringCenter, k));
                 }
-            } else {
-                drawIndex = (historyIndex + 1) % historySize;
+                winnerItem.setPos(lerpVec(start[winnerIdx], top, smoothStep((double) t / gatherTicks)));
             }
 
-            if (tick % drawPeriod == 0) {
-                drawWireframe(historyX[drawIndex], historyY[drawIndex], historyZ[drawIndex], edges);
-            }
-
-            historyIndex = (historyIndex + 1) % historySize;
-
-            endAngleX = angleX;
-            endAngleY = angleY;
-            endRadius = currentRadius;
-
-            sleepTicks(1L);
-        }
-    }
-
-    private void finish(List<VirtualItem> items, double[] bx, double[] by, double[] bz, int[][] edges) throws InterruptedException {
-        int count = items.size();
-        int drawPeriod = config.timings.wireframePeriod;
-
-        double radX = Math.toRadians(endAngleX);
-        double radY = Math.toRadians(endAngleY);
-        double cosX = Math.cos(radX);
-        double sinX = Math.sin(radX);
-        double cosY = Math.cos(radY);
-        double sinY = Math.sin(radY);
-
-        double[] px = new double[count];
-        double[] py = new double[count];
-        double[] pz = new double[count];
-        double[] buf = new double[3];
-
-        for (int step = 1; step <= config.timings.finalCollapseTicks; step++) {
-            double t = smoothStep((double) step / config.timings.finalCollapseTicks);
-            double currentRadius = endRadius * (1.0D - t);
-
-            for (int i = 0; i < count; i++) {
-                VirtualItem item = items.get(i);
-                if (item == null) continue;
-
-                Vec3d pos;
-                if (item == winnerItem) {
-                    rotatePoint(bx[i], by[i], bz[i], endRadius, cosX, sinX, cosY, sinY, buf);
-                    Vec3d start = new Vec3d(center.x + buf[0], center.y + buf[1], center.z + buf[2]);
-                    pos = lerpVec(start, center, t);
-                } else {
-                    rotatePoint(bx[i], by[i], bz[i], currentRadius, cosX, sinX, cosY, sinY, buf);
-                    pos = new Vec3d(center.x + buf[0], center.y + buf[1], center.z + buf[2]);
+            if (t >= removalStart) {
+                for (int r = 0; r < removalsPerTick && !losers.isEmpty(); r++) {
+                    VirtualItem loser = losers.remove(0);
+                    poof(loser.getPos());
+                    removeAndForget(loser);
                 }
-
-                item.setPos(pos);
-                item.lookAt(center);
-
-                px[i] = pos.x;
-                py[i] = pos.y;
-                pz[i] = pos.z;
             }
 
-            if (step % drawPeriod == 0) {
-                drawWireframe(px, py, pz, edges);
+            if (t == removalStart + 2) {
+                playSound(top, winSound, 0.8F, 1.0F);
+                burst(top);
             }
-            drawItemAura(items);
 
-            sleepTicks(1L);
-        }
-
-        for (VirtualItem item : new ArrayList<>(items)) {
-            if (item == winnerItem) continue;
-            removeAndForget(item);
-        }
-
-        if (winnerItem != null) {
-            winnerItem.setPos(center);
-            winnerItem.lookAt(center);
-        }
-
-        playSound(center, winSound, 0.9F, 1.0F);
-
-        for (int i = 0; i < config.timings.finalHoldTicks; i++) {
-            if (winnerItem != null) {
-                winnerItem.setPos(center);
+            if (t > gatherTicks) {
+                int bt = t - gatherTicks;
+                double ramp = Math.min(1.0D, bt / 6.0D);
+                double bob = 0.1D * Math.sin(0.13D * bt) * ramp;
+                winnerItem.setPos(top.add(0.0D, bob, 0.0D));
+                drawSwirl(top);
             }
+
             sleepTicks(1L);
         }
 
@@ -383,49 +308,53 @@ public class SphereAnimator extends AbstractAnimation {
         winnerItem = null;
     }
 
-    private void drawWireframe(double[] posX, double[] posY, double[] posZ, int[][] edges) {
-        for (int[] edge : edges) {
-            int a = edge[0];
-            int b = edge[1];
+    private Vec3d ringPos(int i, int count, double[] slot, double waveAmp) {
+        double ang = slot[i] + orbitAngle;
+        double r = ringRadius;
+        double y = waveAmp * Math.sin(wavePhase + (2.0D * Math.PI * i) / count);
 
-            double ax = posX[a], ay = posY[a], az = posZ[a];
-            double bxp = posX[b], byp = posY[b], bzp = posZ[b];
+        double x = Math.cos(ang) * r;
+        double z = Math.sin(ang) * r;
 
-            double dx = bxp - ax;
-            double dy = byp - ay;
-            double dz = bzp - az;
-            double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        double cosT = Math.cos(tilt);
+        double sinT = Math.sin(tilt);
+        double y1 = y * cosT - z * sinT;
+        double z1 = y * sinT + z * cosT;
 
-            if (dist <= 0.001D) continue;
+        double cosG = Math.cos(gamma);
+        double sinG = Math.sin(gamma);
+        double x2 = x * cosG + z1 * sinG;
+        double z2 = -x * sinG + z1 * cosG;
 
-            double nx = dx / dist;
-            double ny = dy / dist;
-            double nz = dz / dist;
+        return new Vec3d(ringCenter.x + x2, ringCenter.y + y1, ringCenter.z + z2);
+    }
 
-            double start = config.timings.wireframeIndent;
-            double end = dist - config.timings.wireframeIndent;
+    private void drawTrail(List<VirtualItem> items) {
+        if (config.timings.trailPeriod <= 0) return;
+        if (trailTick++ % config.timings.trailPeriod != 0) return;
 
-            if (end <= start) continue;
-
-            for (double d = start; d <= end; d += config.timings.wireframeStep) {
-                Vec3d point = new Vec3d(ax + nx * d, ay + ny * d, az + nz * d);
-                if (isRedstone(vectorParticle)) {
-                    spawnParticle(Particle.REDSTONE, point, 0, 0.0D, 0.0D, 0.0D, 0.0D, dustOptions);
-                } else {
-                    spawnParticle(vectorParticle, point, 0, 0.0D, 0.0D, 0.0D, 0.0D);
-                }
+        for (VirtualItem item : items) {
+            Vec3d pos = item.getPos();
+            if (pos == null) continue;
+            if (isRedstone(trailParticle)) {
+                spawnParticle(Particle.REDSTONE, pos, 0, 0.0D, 0.0D, 0.0D, 0.0D, dustOptions);
+            } else {
+                spawnParticle(trailParticle, pos, 0, 0.0D, 0.0D, 0.0D, 0.0D);
             }
         }
     }
 
-    private void drawItemAura(List<VirtualItem> items) {
-        if (config.timings.itemAuraPeriod <= 0) return;
-        if (tickCounter++ % config.timings.itemAuraPeriod != 0) return;
+    private void drawSwirl(Vec3d top) {
+        if (swirlTick++ % 3 != 0) return;
 
-        for (VirtualItem item : items) {
-            if (item == null) continue;
-            Vec3d pos = item.getPos();
-            if (pos == null) continue;
+        for (int k = 0; k < 2; k++) {
+            swirlAngle += 0.55D;
+            double y = 0.45D * Math.sin(swirlAngle * 0.5D);
+            Vec3d pos = top.add(
+                    Math.cos(swirlAngle) * 0.65D,
+                    y,
+                    Math.sin(swirlAngle) * 0.65D
+            );
             if (isRedstone(itemParticle)) {
                 spawnParticle(Particle.REDSTONE, pos, 0, 0.0D, 0.0D, 0.0D, 0.0D, dustOptions);
             } else {
@@ -434,37 +363,21 @@ public class SphereAnimator extends AbstractAnimation {
         }
     }
 
-    private int[][] buildEdges(double[] bx, double[] by, double[] bz, int count, int neighbors) {
-        int neighborsPerPoint = Math.min(neighbors, count - 1);
-
-        Set<Long> edgeSet = new HashSet<>();
-        List<int[]> edgeList = new ArrayList<>();
-
-        for (int i = 0; i < count; i++) {
-            double[][] dists = new double[count][2];
-            for (int j = 0; j < count; j++) {
-                double dx = bx[i] - bx[j];
-                double dy = by[i] - by[j];
-                double dz = bz[i] - bz[j];
-                dists[j][0] = j;
-                dists[j][1] = dx * dx + dy * dy + dz * dz;
-            }
-
-            Arrays.sort(dists, (a, b) -> Double.compare(a[1], b[1]));
-
-            for (int k = 1; k <= neighborsPerPoint && k < count; k++) {
-                int j = (int) dists[k][0];
-                int a = Math.min(i, j);
-                int b = Math.max(i, j);
-                long key = ((long) a << 32) | (b & 0xFFFFFFFFL);
-
-                if (edgeSet.add(key)) {
-                    edgeList.add(new int[]{a, b});
-                }
-            }
+    private void poof(Vec3d pos) {
+        if (pos == null) return;
+        if (isRedstone(trailParticle)) {
+            spawnParticle(Particle.REDSTONE, pos, 6, 0.22D, 0.22D, 0.22D, 0.0D, dustOptions);
+        } else {
+            spawnParticle(trailParticle, pos, 6, 0.22D, 0.22D, 0.22D, 0.0D);
         }
+    }
 
-        return edgeList.toArray(new int[0][]);
+    private void burst(Vec3d pos) {
+        if (isRedstone(itemParticle)) {
+            spawnParticle(Particle.REDSTONE, pos, 40, 0.5D, 0.5D, 0.5D, 0.0D, dustOptions);
+        } else {
+            spawnParticle(itemParticle, pos, 40, 0.5D, 0.5D, 0.5D, 0.0D);
+        }
     }
 
     private static Method paperDisplayName;
@@ -585,21 +498,6 @@ public class SphereAnimator extends AbstractAnimation {
         return parent.append(c);
     }
 
-    private static void rotatePoint(double bx, double by, double bz, double radius,
-                                    double cosX, double sinX, double cosY, double sinY,
-                                    double[] out) {
-        double x = bx * radius;
-        double y = by * radius;
-        double z = bz * radius;
-
-        double y1 = y * cosX - z * sinX;
-        double z1 = y * sinX + z * cosX;
-
-        out[0] = x * cosY + z1 * sinY;
-        out[1] = y1;
-        out[2] = -x * sinY + z1 * cosY;
-    }
-
     private Vec3d lerpVec(Vec3d a, Vec3d b, double t) {
         return new Vec3d(
                 a.x + (b.x - a.x) * t,
@@ -665,9 +563,10 @@ public class SphereAnimator extends AbstractAnimation {
     private static class Config {
         public static final Codec<Config> CODEC = RecordCodecBuilder.create(i -> i.group(
                 Codec.DOUBLE.optionalFieldOf("radius", 2.5D).forGetter(v -> v.radius),
-                Codec.INT.optionalFieldOf("itemCount", 12).forGetter(v -> v.itemCount),
-                Codec.DOUBLE.optionalFieldOf("shrink", 0.78D).forGetter(v -> v.shrink),
-                Codec.DOUBLE.optionalFieldOf("rotationSpeed", 3.0D).forGetter(v -> v.rotationSpeed),
+                Codec.INT.optionalFieldOf("itemCount", 10).forGetter(v -> v.itemCount),
+                Codec.DOUBLE.optionalFieldOf("rotationSpeed", 7.0D).forGetter(v -> v.rotationSpeed),
+                Codec.DOUBLE.optionalFieldOf("precession", 30.0D).forGetter(v -> v.precession),
+                Codec.DOUBLE.optionalFieldOf("height", 1.2D).forGetter(v -> v.height),
                 Codec.STRING.optionalFieldOf("particleVector", "REDSTONE").forGetter(v -> v.particleVector),
                 Codec.STRING.optionalFieldOf("particleItems", "REDSTONE").forGetter(v -> v.particleItems),
                 Codec.INT.optionalFieldOf("red", 255).forGetter(v -> v.red),
@@ -679,8 +578,9 @@ public class SphereAnimator extends AbstractAnimation {
 
         final double radius;
         final int itemCount;
-        final double shrink;
         final double rotationSpeed;
+        final double precession;
+        final double height;
         final String particleVector;
         final String particleItems;
         final int red;
@@ -689,13 +589,14 @@ public class SphereAnimator extends AbstractAnimation {
         final int showItemNames;
         final Timings timings;
 
-        Config(double radius, int itemCount, double shrink, double rotationSpeed,
+        Config(double radius, int itemCount, double rotationSpeed, double precession, double height,
                String particleVector, String particleItems, int red, int green, int blue,
                int showItemNames, Timings timings) {
-            this.radius = clamp(radius, 0.5D, 8.0D);
-            this.itemCount = (int) clamp(itemCount, 4, 64);
-            this.shrink = clamp(shrink, 0.3D, 0.95D);
-            this.rotationSpeed = clamp(rotationSpeed, 0.5D, 8.0D);
+            this.radius = clamp(radius, 0.8D, 6.0D);
+            this.itemCount = (int) clamp(itemCount, 4, 24);
+            this.rotationSpeed = clamp(rotationSpeed, 1.0D, 20.0D);
+            this.precession = clamp(precession, 0.0D, 70.0D);
+            this.height = clamp(height, 0.0D, 4.0D);
             this.particleVector = particleVector == null ? "REDSTONE" : particleVector;
             this.particleItems = particleItems == null ? "REDSTONE" : particleItems;
             this.red = red;
@@ -706,7 +607,7 @@ public class SphereAnimator extends AbstractAnimation {
         }
 
         Config() {
-            this(2.5D, 12, 0.78D, 3.0D, "REDSTONE", "REDSTONE", 255, 105, 180, 1, new Timings());
+            this(2.5D, 10, 7.0D, 30.0D, 1.2D, "REDSTONE", "REDSTONE", 255, 105, 180, 1, new Timings());
         }
 
         private static double clamp(double v, double min, double max) {
@@ -716,49 +617,39 @@ public class SphereAnimator extends AbstractAnimation {
 
     private static class Timings {
         public static final Codec<Timings> CODEC = RecordCodecBuilder.create(i -> i.group(
-                Codec.INT.optionalFieldOf("rotationTicks", 160).forGetter(v -> v.rotationTicks),
-                Codec.INT.optionalFieldOf("spawnSteps", 6).forGetter(v -> v.spawnSteps),
-                Codec.INT.optionalFieldOf("finalCollapseTicks", 20).forGetter(v -> v.finalCollapseTicks),
-                Codec.INT.optionalFieldOf("finalHoldTicks", 15).forGetter(v -> v.finalHoldTicks),
-                Codec.INT.optionalFieldOf("wireframeDelayTicks", 3).forGetter(v -> v.wireframeDelayTicks),
-                Codec.DOUBLE.optionalFieldOf("wireframeStep", 0.5D).forGetter(v -> v.wireframeStep),
-                Codec.DOUBLE.optionalFieldOf("wireframeIndent", 0.35D).forGetter(v -> v.wireframeIndent),
-                Codec.INT.optionalFieldOf("wireframePeriod", 1).forGetter(v -> v.wireframePeriod),
-                Codec.INT.optionalFieldOf("itemAuraPeriod", 0).forGetter(v -> v.itemAuraPeriod),
-                Codec.STRING.optionalFieldOf("spawnSound", "BLOCK_FIRE_EXTINGUISH").forGetter(v -> v.spawnSound),
-                Codec.STRING.optionalFieldOf("winSound", "ENTITY_EXPERIENCE_ORB_PICKUP").forGetter(v -> v.winSound)
+                Codec.INT.optionalFieldOf("ascentSteps", 5).forGetter(v -> v.ascentSteps),
+                Codec.INT.optionalFieldOf("ascentGap", 2).forGetter(v -> v.ascentGap),
+                Codec.INT.optionalFieldOf("orbitTicks", 150).forGetter(v -> v.orbitTicks),
+                Codec.INT.optionalFieldOf("convergenceTicks", 40).forGetter(v -> v.convergenceTicks),
+                Codec.INT.optionalFieldOf("winnerTicks", 45).forGetter(v -> v.winnerTicks),
+                Codec.INT.optionalFieldOf("trailPeriod", 2).forGetter(v -> v.trailPeriod),
+                Codec.STRING.optionalFieldOf("spawnSound", "BLOCK_NOTE_BLOCK_PLING").forGetter(v -> v.spawnSound),
+                Codec.STRING.optionalFieldOf("winSound", "ENTITY_PLAYER_LEVELUP").forGetter(v -> v.winSound)
         ).apply(i, Timings::new));
 
-        final int rotationTicks;
-        final int spawnSteps;
-        final int finalCollapseTicks;
-        final int finalHoldTicks;
-        final int wireframeDelayTicks;
-        final double wireframeStep;
-        final double wireframeIndent;
-        final int wireframePeriod;
-        final int itemAuraPeriod;
+        final int ascentSteps;
+        final int ascentGap;
+        final int orbitTicks;
+        final int convergenceTicks;
+        final int winnerTicks;
+        final int trailPeriod;
         final String spawnSound;
         final String winSound;
 
-        Timings(int rotationTicks, int spawnSteps, int finalCollapseTicks, int finalHoldTicks,
-                int wireframeDelayTicks, double wireframeStep, double wireframeIndent,
-                int wireframePeriod, int itemAuraPeriod, String spawnSound, String winSound) {
-            this.rotationTicks = (int) clamp(rotationTicks, 10, 1200);
-            this.spawnSteps = (int) clamp(spawnSteps, 1, 20);
-            this.finalCollapseTicks = (int) clamp(finalCollapseTicks, 1, 200);
-            this.finalHoldTicks = (int) clamp(finalHoldTicks, 0, 200);
-            this.wireframeDelayTicks = (int) clamp(wireframeDelayTicks, 1, 20);
-            this.wireframeStep = clamp(wireframeStep, 0.15D, 2.0D);
-            this.wireframeIndent = clamp(wireframeIndent, 0.0D, 2.0D);
-            this.wireframePeriod = (int) clamp(wireframePeriod, 1, 10);
-            this.itemAuraPeriod = (int) clamp(itemAuraPeriod, 0, 40);
-            this.spawnSound = spawnSound == null ? "BLOCK_FIRE_EXTINGUISH" : spawnSound;
-            this.winSound = winSound == null ? "ENTITY_EXPERIENCE_ORB_PICKUP" : winSound;
+        Timings(int ascentSteps, int ascentGap, int orbitTicks, int convergenceTicks, int winnerTicks,
+                int trailPeriod, String spawnSound, String winSound) {
+            this.ascentSteps = (int) clamp(ascentSteps, 2, 15);
+            this.ascentGap = (int) clamp(ascentGap, 1, 5);
+            this.orbitTicks = (int) clamp(orbitTicks, 20, 1200);
+            this.convergenceTicks = (int) clamp(convergenceTicks, 10, 200);
+            this.winnerTicks = (int) clamp(winnerTicks, 10, 200);
+            this.trailPeriod = (int) clamp(trailPeriod, 0, 10);
+            this.spawnSound = spawnSound == null ? "BLOCK_NOTE_BLOCK_PLING" : spawnSound;
+            this.winSound = winSound == null ? "ENTITY_PLAYER_LEVELUP" : winSound;
         }
 
         Timings() {
-            this(160, 6, 20, 15, 3, 0.5D, 0.35D, 1, 0, "BLOCK_FIRE_EXTINGUISH", "ENTITY_EXPERIENCE_ORB_PICKUP");
+            this(5, 2, 150, 40, 45, 2, "BLOCK_NOTE_BLOCK_PLING", "ENTITY_PLAYER_LEVELUP");
         }
 
         private static double clamp(double v, double min, double max) {
