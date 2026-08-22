@@ -12,22 +12,14 @@ import dev.by1337.bc.yaml.CashedYamlContext;
 import dev.by1337.virtualentity.api.entity.EquipmentSlot;
 import dev.by1337.virtualentity.api.virtual.VirtualEntity;
 import dev.by1337.virtualentity.api.virtual.decoration.VirtualArmorStand;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
 import org.by1337.blib.geom.Vec3d;
 
-import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 public class SphereAnimator extends AbstractAnimation {
 
@@ -121,6 +113,24 @@ public class SphereAnimator extends AbstractAnimation {
     public void onInteract(PlayerInteractEvent event) {
     }
 
+    private VirtualArmorStand spawnStand(Prize prize, Vec3d pos, float yaw) {
+        VirtualArmorStand stand = VirtualArmorStand.create();
+        stand.setSmall(true);
+        stand.setNoBasePlate(true);
+        stand.setNoGravity(true);
+        stand.setInvisible(true);
+        stand.setNoMotion();
+        stand.setEquipment(EquipmentSlot.HEAD, prize.itemStack());
+        stand.setCustomName(prize.displayNameComponent());
+        stand.setCustomNameVisible(true);
+        stand.setPos(pos);
+        stand.setYaw(yaw);
+
+        trackEntity(stand);
+        activeItems.add(stand);
+        return stand;
+    }
+
     private void ascent(int count, int winnerIdx, double[] slot, List<VirtualArmorStand> items) throws InterruptedException {
         int steps = config.timings.ascentSteps;
         int gap = config.timings.ascentGap;
@@ -135,28 +145,12 @@ public class SphereAnimator extends AbstractAnimation {
 
                 if (spawned[i] == null) {
                     Prize prize = (i == winnerIdx) ? winner : safePrize();
-                    ItemStack stack = prize.itemStack();
-
-                    VirtualArmorStand stand = VirtualArmorStand.create();
-                    stand.setMarker(true);
-                    stand.setSmall(true);
-                    stand.setNoBasePlate(true);
-                    stand.setNoGravity(true);
-                    stand.setNoMotion();
-                    stand.setEquipment(EquipmentSlot.HEAD, stack);
-                    stand.setPos(center);
-                    stand.setYaw((float) Math.toDegrees(slot[i]) - 90.0F);
-
-                    trackEntity(stand);
-                    activeItems.add(stand);
-                    items.add(stand);
-                    spawned[i] = stand;
-
-                    boolean named = applyName(stand, stack);
-                    stand.setCustomNameVisible(named);
+                    float yaw = (float) Math.toDegrees(slot[i]) - 90.0F;
+                    spawned[i] = spawnStand(prize, center, yaw);
+                    items.add(spawned[i]);
 
                     if (i == winnerIdx) {
-                        winnerItem = stand;
+                        winnerItem = spawned[i];
                     }
 
                     float pitch = 0.55F + 0.6F * ((float) i / count);
@@ -285,123 +279,6 @@ public class SphereAnimator extends AbstractAnimation {
                 ringCenter.y + y,
                 ringCenter.z + Math.sin(ang) * ringRadius
         );
-    }
-
-    private static Method paperDisplayName;
-    private static boolean paperDisplayNameResolved;
-
-    private boolean applyName(VirtualArmorStand stand, ItemStack stack) {
-        try {
-            if (stack == null) return false;
-            ItemMeta meta = stack.getItemMeta();
-            if (meta == null) return false;
-
-            Component name = paperName(meta);
-            if (name == null && meta.hasDisplayName()) {
-                name = legacyToComponent(meta.getDisplayName());
-            }
-            if (name == null) return false;
-
-            stand.setCustomName(name);
-            return true;
-        } catch (Throwable ignored) {
-            return false;
-        }
-    }
-
-    private static Component paperName(ItemMeta meta) {
-        try {
-            if (!paperDisplayNameResolved) {
-                paperDisplayNameResolved = true;
-                try {
-                    paperDisplayName = meta.getClass().getMethod("displayName");
-                } catch (Throwable ignored) {
-                    paperDisplayName = null;
-                }
-            }
-            if (paperDisplayName == null) return null;
-            Object name = paperDisplayName.invoke(meta);
-            return name instanceof Component ? (Component) name : null;
-        } catch (Throwable ignored) {
-            return null;
-        }
-    }
-
-    private static final Map<Character, NamedTextColor> LEGACY_COLORS = buildLegacyColors();
-
-    private static Map<Character, NamedTextColor> buildLegacyColors() {
-        Map<Character, NamedTextColor> m = new HashMap<>();
-        m.put('0', NamedTextColor.BLACK);
-        m.put('1', NamedTextColor.DARK_BLUE);
-        m.put('2', NamedTextColor.DARK_GREEN);
-        m.put('3', NamedTextColor.DARK_AQUA);
-        m.put('4', NamedTextColor.DARK_RED);
-        m.put('5', NamedTextColor.DARK_PURPLE);
-        m.put('6', NamedTextColor.GOLD);
-        m.put('7', NamedTextColor.GRAY);
-        m.put('8', NamedTextColor.DARK_GRAY);
-        m.put('9', NamedTextColor.BLUE);
-        m.put('a', NamedTextColor.GREEN);
-        m.put('b', NamedTextColor.AQUA);
-        m.put('c', NamedTextColor.RED);
-        m.put('d', NamedTextColor.LIGHT_PURPLE);
-        m.put('e', NamedTextColor.YELLOW);
-        m.put('f', NamedTextColor.WHITE);
-        return m;
-    }
-
-    private static Component legacyToComponent(String legacy) {
-        if (legacy == null || legacy.isEmpty()) return null;
-
-        Component result = Component.empty();
-        StringBuilder buf = new StringBuilder();
-        NamedTextColor color = null;
-        boolean bold = false, italic = false, underlined = false, strikethrough = false, obfuscated = false;
-
-        for (int i = 0; i < legacy.length(); i++) {
-            char c = legacy.charAt(i);
-            if (c == '§' && i + 1 < legacy.length()) {
-                char code = Character.toLowerCase(legacy.charAt(++i));
-                NamedTextColor newColor = LEGACY_COLORS.get(code);
-                if (newColor != null || code == 'r' || "klmno".indexOf(code) >= 0) {
-                    if (buf.length() > 0) {
-                        result = appendStyled(result, buf.toString(), color, bold, italic, underlined, strikethrough, obfuscated);
-                        buf.setLength(0);
-                    }
-                    if (newColor != null) {
-                        color = newColor;
-                    } else if (code == 'r') {
-                        color = null;
-                        bold = italic = underlined = strikethrough = obfuscated = false;
-                    } else if (code == 'k') obfuscated = true;
-                    else if (code == 'l') bold = true;
-                    else if (code == 'm') strikethrough = true;
-                    else if (code == 'n') underlined = true;
-                    else if (code == 'o') italic = true;
-                    continue;
-                }
-            }
-            buf.append(c);
-        }
-
-        if (buf.length() > 0) {
-            result = appendStyled(result, buf.toString(), color, bold, italic, underlined, strikethrough, obfuscated);
-        }
-
-        return result;
-    }
-
-    private static Component appendStyled(Component parent, String text, NamedTextColor color,
-                                           boolean bold, boolean italic, boolean underlined,
-                                           boolean strikethrough, boolean obfuscated) {
-        Component c = Component.text(text);
-        if (color != null) c = c.color(color);
-        if (bold) c = c.decoration(TextDecoration.BOLD, true);
-        if (italic) c = c.decoration(TextDecoration.ITALIC, true);
-        if (underlined) c = c.decoration(TextDecoration.UNDERLINED, true);
-        if (strikethrough) c = c.decoration(TextDecoration.STRIKETHROUGH, true);
-        if (obfuscated) c = c.decoration(TextDecoration.OBFUSCATED, true);
-        return parent.append(c);
     }
 
     private Vec3d lerpVec(Vec3d a, Vec3d b, double t) {

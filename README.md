@@ -15,12 +15,12 @@ cd ElytrixAddonSphere
 mvn package
 ```
 
-Готовый jar: `target/ElytrixAnimAddon-1.13.jar` (требуется JDK 17 и доступ к
+Готовый jar: `target/ElytrixAnimAddon-1.14.jar` (требуется JDK 17 и доступ к
 `repo.by1337.space` — там лежат BCases-common и VirtualEntityApi).
 
 ## Установка
 
-1. Положите `ElytrixAnimAddon-1.13.jar` в папку аддонов BCases (обычно `plugins/BCases/addons/`).
+1. Положите `ElytrixAnimAddon-1.14.jar` в папку аддонов BCases (обычно `plugins/BCases/addons/`).
 2. Перезапустите сервер — при первом запуске создастся
    `plugins/BCases/animations/sphere/sphereAnimation.yml`.
 3. Укажите анимацию `elytrix:sphere` в настройках кейса.
@@ -43,6 +43,14 @@ mvn package
 
 Любой ключ можно удалить — подставится значение по умолчанию. Полностью битый
 файл конфигурации не ломает анимацию: она откатывается к встроенным дефолтам.
+
+## Технические заметки
+
+Анимация написана по официальному образцу BCases (как WheelAnim из исходников
+By1337/BCases): маленькие невидимые армор-стенды с предметом приза на голове,
+имя приза — через Prize#displayNameComponent(). Такое же отображение, как у
+дефолтных анимаций, — и такая же плавность (живые сущности лерпят
+принудительные телепорты VirtualEntityApi).
 
 ## Технические заметки о плавности
 
