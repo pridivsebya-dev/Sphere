@@ -12,6 +12,9 @@ import dev.by1337.bc.yaml.CashedYamlContext;
 import dev.by1337.virtualentity.api.entity.EquipmentSlot;
 import dev.by1337.virtualentity.api.virtual.VirtualEntity;
 import dev.by1337.virtualentity.api.virtual.decoration.VirtualArmorStand;
+import dev.by1337.virtualentity.api.virtual.item.VirtualItem;
+import org.bukkit.Color;
+import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -29,13 +32,20 @@ public class SphereAnimator extends AbstractAnimation {
     private final Vec3d ringCenter;
     private final Sound spawnSound;
     private final Sound winSound;
+    private final Particle trailParticle;
+    private final Particle itemParticle;
+    private final Particle.DustOptions dustOptions;
 
-    private final List<VirtualArmorStand> activeItems = new ArrayList<>();
-    private VirtualArmorStand winnerItem;
+    private final List<VirtualEntity> activeItems = new ArrayList<>();
+    private VirtualEntity winnerItem;
 
     private double orbitAngle = 0.0D;
     private double ringRadius;
     private double wavePhase = 0.0D;
+
+    private int trailTick;
+    private int swirlTick;
+    private double swirlAngle = 0.0D;
 
     public SphereAnimator(
             CaseBlock caseBlock,
@@ -67,6 +77,17 @@ public class SphereAnimator extends AbstractAnimation {
 
         this.spawnSound = parseSound(this.config.timings.spawnSound, Sound.BLOCK_NOTE_BLOCK_PLING);
         this.winSound = parseSound(this.config.timings.winSound, Sound.ENTITY_PLAYER_LEVELUP);
+        this.trailParticle = parseParticle(this.config.particleVector, Particle.REDSTONE);
+        this.itemParticle = parseParticle(this.config.particleItems, Particle.REDSTONE);
+
+        this.dustOptions = new Particle.DustOptions(
+                Color.fromRGB(
+                        Math.max(0, Math.min(255, this.config.red)),
+                        Math.max(0, Math.min(255, this.config.green)),
+                        Math.max(0, Math.min(255, this.config.blue))
+                ),
+                0.6F
+        );
     }
 
     @Override
@@ -85,7 +106,7 @@ public class SphereAnimator extends AbstractAnimation {
             slot[i] = (2.0D * Math.PI * i) / count;
         }
 
-        List<VirtualArmorStand> items = new ArrayList<>(count);
+        List<VirtualEntity> items = new ArrayList<>(count);
 
         try {
             ascent(count, winnerIdx, slot, items);
@@ -113,31 +134,42 @@ public class SphereAnimator extends AbstractAnimation {
     public void onInteract(PlayerInteractEvent event) {
     }
 
-    private VirtualArmorStand spawnStand(Prize prize, Vec3d pos, float yaw) {
-        VirtualArmorStand stand = VirtualArmorStand.create();
-        stand.setSmall(true);
-        stand.setNoBasePlate(true);
-        stand.setNoGravity(true);
-        stand.setInvisible(true);
-        stand.setNoMotion();
-        stand.setEquipment(EquipmentSlot.HEAD, prize.itemStack());
-        stand.setCustomName(prize.displayNameComponent());
-        stand.setCustomNameVisible(true);
-        stand.setPos(pos);
-        stand.setYaw(yaw);
+    private VirtualEntity spawnDisplay(Prize prize, Vec3d pos, float yaw) {
+        if (config.standMode) {
+            VirtualArmorStand stand = VirtualArmorStand.create();
+            stand.setSmall(true);
+            stand.setNoBasePlate(true);
+            stand.setNoGravity(true);
+            stand.setInvisible(true);
+            stand.setMarker(true);
+            stand.setNoMotion();
+            stand.setEquipment(EquipmentSlot.HEAD, prize.itemStack());
+            stand.setPos(pos);
+            stand.setYaw(yaw);
+            trackEntity(stand);
+            activeItems.add(stand);
+            return stand;
+        }
 
-        trackEntity(stand);
-        activeItems.add(stand);
-        return stand;
+        VirtualItem item = VirtualItem.create();
+        item.setItem(prize.itemStack());
+        item.setPos(pos);
+        item.setNoGravity(true);
+        item.setNoMotion();
+        item.setCustomName(prize.displayNameComponent());
+        item.setCustomNameVisible(true);
+        trackEntity(item);
+        activeItems.add(item);
+        return item;
     }
 
-    private void ascent(int count, int winnerIdx, double[] slot, List<VirtualArmorStand> items) throws InterruptedException {
+    private void ascent(int count, int winnerIdx, double[] slot, List<VirtualEntity> items) throws InterruptedException {
         int steps = config.timings.ascentSteps;
         int gap = config.timings.ascentGap;
         int total = (count - 1) * gap + steps + 1;
 
         int[] progress = new int[count];
-        VirtualArmorStand[] spawned = new VirtualArmorStand[count];
+        VirtualEntity[] spawned = new VirtualEntity[count];
 
         for (int t = 0; t < total; t++) {
             for (int i = 0; i < count; i++) {
@@ -146,7 +178,7 @@ public class SphereAnimator extends AbstractAnimation {
                 if (spawned[i] == null) {
                     Prize prize = (i == winnerIdx) ? winner : safePrize();
                     float yaw = (float) Math.toDegrees(slot[i]) - 90.0F;
-                    spawned[i] = spawnStand(prize, center, yaw);
+                    spawned[i] = spawnDisplay(prize, center, yaw);
                     items.add(spawned[i]);
 
                     if (i == winnerIdx) {
@@ -176,7 +208,7 @@ public class SphereAnimator extends AbstractAnimation {
         }
     }
 
-    private void orbit(int count, List<VirtualArmorStand> items, double[] slot) throws InterruptedException {
+    private void orbit(int count, List<VirtualEntity> items, double[] slot) throws InterruptedException {
         int ticks = config.timings.orbitTicks;
         double baseRadius = config.radius;
         double speed = Math.toRadians(config.rotationSpeed);
@@ -189,6 +221,8 @@ public class SphereAnimator extends AbstractAnimation {
                 items.get(i).setPos(ringPos(i, count, slot, waveAmp));
             }
 
+            drawTrail(items);
+
             orbitAngle += speed;
             wavePhase += 0.1D;
 
@@ -196,7 +230,7 @@ public class SphereAnimator extends AbstractAnimation {
         }
     }
 
-    private void converge(int count, List<VirtualArmorStand> items, double[] slot) throws InterruptedException {
+    private void converge(int count, List<VirtualEntity> items, double[] slot) throws InterruptedException {
         int ticks = config.timings.convergenceTicks;
         double startRadius = ringRadius;
 
@@ -210,6 +244,8 @@ public class SphereAnimator extends AbstractAnimation {
                 items.get(i).setPos(ringPos(i, count, slot, waveAmp));
             }
 
+            drawTrail(items);
+
             orbitAngle += Math.toRadians(config.rotationSpeed * (1.0D + 2.2D * sm));
             wavePhase += 0.15D * (1.0D + sm);
 
@@ -219,7 +255,7 @@ public class SphereAnimator extends AbstractAnimation {
         playSound(ringCenter, Sound.ENTITY_ENDERMAN_TELEPORT, 0.5F, 0.7F);
     }
 
-    private void showcase(int count, int winnerIdx, List<VirtualArmorStand> items, double[] slot) throws InterruptedException {
+    private void showcase(int count, int winnerIdx, List<VirtualEntity> items, double[] slot) throws InterruptedException {
         int ticks = config.timings.winnerTicks;
 
         Vec3d[] start = new Vec3d[count];
@@ -228,7 +264,7 @@ public class SphereAnimator extends AbstractAnimation {
         }
 
         Vec3d top = ringCenter.add(0.0D, -0.3D, 0.0D);
-        List<VirtualArmorStand> losers = new ArrayList<>();
+        List<VirtualEntity> losers = new ArrayList<>();
         for (int i = 0; i < count; i++) {
             if (i != winnerIdx) losers.add(items.get(i));
         }
@@ -249,12 +285,15 @@ public class SphereAnimator extends AbstractAnimation {
 
             if (t >= removalStart) {
                 for (int r = 0; r < removalsPerTick && !losers.isEmpty(); r++) {
-                    removeAndForget(losers.remove(0));
+                    VirtualEntity loser = losers.remove(0);
+                    poof(loser.getPos());
+                    removeAndForget(loser);
                 }
             }
 
             if (t == removalStart + 2) {
                 playSound(top, winSound, 0.8F, 1.0F);
+                burst(top);
             }
 
             if (t > gatherTicks) {
@@ -262,6 +301,7 @@ public class SphereAnimator extends AbstractAnimation {
                 double ramp = Math.min(1.0D, bt / 6.0D);
                 double bob = 0.1D * Math.sin(0.13D * bt) * ramp;
                 winnerItem.setPos(top.add(0.0D, bob, 0.0D));
+                drawSwirl(top);
             }
 
             sleepTicks(1L);
@@ -281,6 +321,56 @@ public class SphereAnimator extends AbstractAnimation {
         );
     }
 
+    private void drawTrail(List<VirtualEntity> items) {
+        if (trailTick++ % 2 != 0) return;
+
+        for (VirtualEntity item : items) {
+            Vec3d pos = item.getPos();
+            if (pos == null) continue;
+            if (isRedstone(trailParticle)) {
+                spawnParticle(Particle.REDSTONE, pos, 0, 0.0D, 0.0D, 0.0D, 0.0D, dustOptions);
+            } else {
+                spawnParticle(trailParticle, pos, 0, 0.0D, 0.0D, 0.0D, 0.0D);
+            }
+        }
+    }
+
+    private void drawSwirl(Vec3d top) {
+        if (swirlTick++ % 3 != 0) return;
+
+        for (int k = 0; k < 2; k++) {
+            swirlAngle += 0.55D;
+            double y = 0.45D * Math.sin(swirlAngle * 0.5D);
+            Vec3d pos = top.add(
+                    Math.cos(swirlAngle) * 0.65D,
+                    y,
+                    Math.sin(swirlAngle) * 0.65D
+            );
+            if (isRedstone(itemParticle)) {
+                spawnParticle(Particle.REDSTONE, pos, 0, 0.0D, 0.0D, 0.0D, 0.0D, dustOptions);
+            } else {
+                spawnParticle(itemParticle, pos, 0, 0.0D, 0.0D, 0.0D, 0.0D);
+            }
+        }
+    }
+
+    private void poof(Vec3d pos) {
+        if (pos == null) return;
+        if (isRedstone(trailParticle)) {
+            spawnParticle(Particle.REDSTONE, pos, 6, 0.22D, 0.22D, 0.22D, 0.0D, dustOptions);
+        } else {
+            spawnParticle(trailParticle, pos, 6, 0.22D, 0.22D, 0.22D, 0.0D);
+        }
+    }
+
+    private void burst(Vec3d pos) {
+        if (isRedstone(itemParticle)) {
+            spawnParticle(Particle.REDSTONE, pos, 40, 0.5D, 0.5D, 0.5D, 0.0D, dustOptions);
+        } else {
+            spawnParticle(itemParticle, pos, 40, 0.5D, 0.5D, 0.5D, 0.0D);
+        }
+    }
+
     private Vec3d lerpVec(Vec3d a, Vec3d b, double t) {
         return new Vec3d(
                 a.x + (b.x - a.x) * t,
@@ -298,7 +388,7 @@ public class SphereAnimator extends AbstractAnimation {
         return p != null ? p : winner;
     }
 
-    private void removeAndForget(VirtualArmorStand item) {
+    private void removeAndForget(VirtualEntity item) {
         if (item == null) return;
         activeItems.remove(item);
         try {
@@ -308,13 +398,22 @@ public class SphereAnimator extends AbstractAnimation {
     }
 
     private void cleanup() {
-        for (VirtualArmorStand item : new ArrayList<>(activeItems)) {
+        for (VirtualEntity item : new ArrayList<>(activeItems)) {
             try {
                 removeEntity(item);
             } catch (Throwable ignored) {
             }
         }
         activeItems.clear();
+    }
+
+    private Particle parseParticle(String name, Particle fallback) {
+        if (name == null || name.trim().isEmpty()) return fallback;
+        try {
+            return Particle.valueOf(name.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return fallback;
+        }
     }
 
     private Sound parseSound(String name, Sound fallback) {
@@ -326,12 +425,22 @@ public class SphereAnimator extends AbstractAnimation {
         }
     }
 
+    private boolean isRedstone(Particle p) {
+        return p == Particle.REDSTONE;
+    }
+
     private static class Config {
         public static final Codec<Config> CODEC = RecordCodecBuilder.create(i -> i.group(
                 Codec.DOUBLE.optionalFieldOf("radius", 2.5D).forGetter(v -> v.radius),
                 Codec.INT.optionalFieldOf("itemCount", 10).forGetter(v -> v.itemCount),
                 Codec.DOUBLE.optionalFieldOf("rotationSpeed", 7.0D).forGetter(v -> v.rotationSpeed),
                 Codec.DOUBLE.optionalFieldOf("height", 0.35D).forGetter(v -> v.height),
+                Codec.STRING.optionalFieldOf("displayMode", "STAND").forGetter(v -> v.displayMode),
+                Codec.STRING.optionalFieldOf("particleVector", "REDSTONE").forGetter(v -> v.particleVector),
+                Codec.STRING.optionalFieldOf("particleItems", "REDSTONE").forGetter(v -> v.particleItems),
+                Codec.INT.optionalFieldOf("red", 255).forGetter(v -> v.red),
+                Codec.INT.optionalFieldOf("green", 105).forGetter(v -> v.green),
+                Codec.INT.optionalFieldOf("blue", 180).forGetter(v -> v.blue),
                 Timings.CODEC.optionalFieldOf("timings", new Timings()).forGetter(v -> v.timings)
         ).apply(i, Config::new));
 
@@ -339,18 +448,34 @@ public class SphereAnimator extends AbstractAnimation {
         final int itemCount;
         final double rotationSpeed;
         final double height;
+        final String displayMode;
+        final boolean standMode;
+        final String particleVector;
+        final String particleItems;
+        final int red;
+        final int green;
+        final int blue;
         final Timings timings;
 
-        Config(double radius, int itemCount, double rotationSpeed, double height, Timings timings) {
+        Config(double radius, int itemCount, double rotationSpeed, double height,
+               String displayMode, String particleVector, String particleItems,
+               int red, int green, int blue, Timings timings) {
             this.radius = clamp(radius, 0.8D, 6.0D);
             this.itemCount = (int) clamp(itemCount, 4, 24);
             this.rotationSpeed = clamp(rotationSpeed, 1.0D, 20.0D);
             this.height = clamp(height, 0.0D, 4.0D);
+            this.displayMode = displayMode == null ? "STAND" : displayMode;
+            this.standMode = !this.displayMode.trim().equalsIgnoreCase("ITEM");
+            this.particleVector = particleVector == null ? "REDSTONE" : particleVector;
+            this.particleItems = particleItems == null ? "REDSTONE" : particleItems;
+            this.red = red;
+            this.green = green;
+            this.blue = blue;
             this.timings = timings == null ? new Timings() : timings;
         }
 
         Config() {
-            this(2.5D, 10, 7.0D, 0.35D, new Timings());
+            this(2.5D, 10, 7.0D, 0.35D, "STAND", "REDSTONE", "REDSTONE", 255, 105, 180, new Timings());
         }
 
         private static double clamp(double v, double min, double max) {

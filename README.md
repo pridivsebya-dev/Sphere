@@ -15,12 +15,12 @@ cd ElytrixAddonSphere
 mvn package
 ```
 
-Готовый jar: `target/ElytrixAnimAddon-1.14.jar` (требуется JDK 17 и доступ к
+Готовый jar: `target/ElytrixAnimAddon-1.15.jar` (требуется JDK 17 и доступ к
 `repo.by1337.space` — там лежат BCases-common и VirtualEntityApi).
 
 ## Установка
 
-1. Положите `ElytrixAnimAddon-1.14.jar` в папку аддонов BCases (обычно `plugins/BCases/addons/`).
+1. Положите `ElytrixAnimAddon-1.15.jar` в папку аддонов BCases (обычно `plugins/BCases/addons/`).
 2. Перезапустите сервер — при первом запуске создастся
    `plugins/BCases/animations/sphere/sphereAnimation.yml`.
 3. Укажите анимацию `elytrix:sphere` в настройках кейса.
@@ -33,6 +33,10 @@ mvn package
 | `itemCount` | `10` | Предметов на орбите (4–24) |
 | `rotationSpeed` | `7.0` | Скорость вращения по кругу, °/тик (1.0–20.0) |
 | `height` | `0.35` | Высота орбиты над кейсом (0.0–4.0); предмет рендерится ~на 1 блок выше |
+| `displayMode` | `STAND` | `STAND` — предмет на невидимом стенде (плавно), `ITEM` — предмет-дроп (меньше размером) |
+| `particleVector` | `REDSTONE` | Частицы-шлейф за призами |
+| `particleItems` | `REDSTONE` | Частицы финального шоу у победителя |
+| `red`/`green`/`blue` | `255/105/180` | Цвет частиц `REDSTONE` |
 | `timings.ascentSteps` | `5` | Тиков разгона предмета при взлёте |
 | `timings.ascentGap` | `2` | Тиков между запусками предметов (каскад) |
 | `timings.orbitTicks` | `150` | Длительность основной фазы вращения |
