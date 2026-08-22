@@ -208,7 +208,8 @@ public class SphereAnimator extends AbstractAnimation {
             double sm = smoothStep(p);
 
             ringRadius = baseRadius * (1.0D - 0.12D * sm);
-            tilt = tiltMax * smoothStep(Math.min(1.0D, t / 40.0D));
+            double swing = 0.5D - 0.5D * Math.cos((2.0D * Math.PI * t) / config.timings.swingTicks);
+            tilt = tiltMax * swing;
             double waveAmp = 0.15D * smoothStep(Math.min(1.0D, t / 15.0D));
 
             for (int i = 0; i < count; i++) {
@@ -620,6 +621,7 @@ public class SphereAnimator extends AbstractAnimation {
                 Codec.INT.optionalFieldOf("ascentGap", 2).forGetter(v -> v.ascentGap),
                 Codec.INT.optionalFieldOf("orbitTicks", 150).forGetter(v -> v.orbitTicks),
                 Codec.INT.optionalFieldOf("tiltCycleTicks", 160).forGetter(v -> v.tiltCycleTicks),
+                Codec.INT.optionalFieldOf("swingTicks", 140).forGetter(v -> v.swingTicks),
                 Codec.INT.optionalFieldOf("convergenceTicks", 40).forGetter(v -> v.convergenceTicks),
                 Codec.INT.optionalFieldOf("winnerTicks", 45).forGetter(v -> v.winnerTicks),
                 Codec.STRING.optionalFieldOf("spawnSound", "BLOCK_NOTE_BLOCK_PLING").forGetter(v -> v.spawnSound),
@@ -630,17 +632,19 @@ public class SphereAnimator extends AbstractAnimation {
         final int ascentGap;
         final int orbitTicks;
         final int tiltCycleTicks;
+        final int swingTicks;
         final int convergenceTicks;
         final int winnerTicks;
         final String spawnSound;
         final String winSound;
 
-        Timings(int ascentSteps, int ascentGap, int orbitTicks, int tiltCycleTicks, int convergenceTicks,
-                int winnerTicks, String spawnSound, String winSound) {
+        Timings(int ascentSteps, int ascentGap, int orbitTicks, int tiltCycleTicks, int swingTicks,
+                int convergenceTicks, int winnerTicks, String spawnSound, String winSound) {
             this.ascentSteps = (int) clamp(ascentSteps, 2, 15);
             this.ascentGap = (int) clamp(ascentGap, 1, 5);
             this.orbitTicks = (int) clamp(orbitTicks, 20, 1200);
             this.tiltCycleTicks = (int) clamp(tiltCycleTicks, 60, 800);
+            this.swingTicks = (int) clamp(swingTicks, 60, 600);
             this.convergenceTicks = (int) clamp(convergenceTicks, 10, 200);
             this.winnerTicks = (int) clamp(winnerTicks, 10, 200);
             this.spawnSound = spawnSound == null ? "BLOCK_NOTE_BLOCK_PLING" : spawnSound;
@@ -648,7 +652,7 @@ public class SphereAnimator extends AbstractAnimation {
         }
 
         Timings() {
-            this(5, 2, 150, 160, 40, 45, "BLOCK_NOTE_BLOCK_PLING", "ENTITY_PLAYER_LEVELUP");
+            this(5, 2, 150, 160, 140, 40, 45, "BLOCK_NOTE_BLOCK_PLING", "ENTITY_PLAYER_LEVELUP");
         }
 
         private static double clamp(double v, double min, double max) {
