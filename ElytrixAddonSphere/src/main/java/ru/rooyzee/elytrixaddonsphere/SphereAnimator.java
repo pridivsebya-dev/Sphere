@@ -270,7 +270,7 @@ public class SphereAnimator extends AbstractAnimation {
         for (int t = 0; t < ticks; t++) {
             double sm = smoothStep((double) t / ticks);
 
-            ringRadius = startRadius * (1.0D - 0.86D * sm);
+            ringRadius = startRadius * (1.0D - 0.5D * sm);
 
             for (int i = 0; i < count; i++) {
                 Vec3d pos = ringPos(i, slot);
@@ -298,50 +298,88 @@ public class SphereAnimator extends AbstractAnimation {
         double displayY = config.standMode ? 1.0D : 0.0D;
         Vec3d showTop = top.add(0.0D, displayY, 0.0D);
 
-        double[] rise = new double[count];
-        List<Integer> losers = new ArrayList<>();
-        for (int i = 0; i < count; i++) {
-            if (i == winnerIdx) continue;
-            losers.add(i);
-            rise[i] = 5.5D + (i % 5) * 0.5D;
+        List<Integer> order = new ArrayList<>();
+        for (int k = 1; k < count; k++) {
+            order.add((winnerIdx + k) % count);
         }
 
-        int flyTicks = 10;
-        int vanishStart = 4;
-        int vanishPerTick = Math.max(1, (losers.size() + flyTicks - vanishStart - 1) / (flyTicks - vanishStart));
-        int revealTick = flyTicks + 2;
+        int perTick = count > 12 ? 3 : (count > 6 ? 2 : 1);
+        int flightTicks = 7;
+        int lastDepart = (order.size() - 1) / perTick;
+        int lastVanish = lastDepart + flightTicks;
+        int winnerStart = lastVanish + 2;
+        int winnerFly = 6;
+        int revealTick = winnerStart + winnerFly;
+
+        Vec3d[] startPos = new Vec3d[count];
+        double[] dirX = new double[count];
+        double[] dirZ = new double[count];
+        int[] departedAt = new int[count];
+        for (int i = 0; i < count; i++) {
+            departedAt[i] = -1;
+        }
 
         for (int t = 0; t < ticks; t++) {
-            if (t <= flyTicks) {
-                double p = (double) t / flyTicks;
-                double e = p * p * p;
+            double spin = config.rotationSpeed * Math.max(0.15D,
+                    3.2D - 3.05D * Math.min(1.0D, (double) t / Math.max(1, lastVanish)));
+            orbitAngle += Math.toRadians(spin);
 
-                orbitAngle += Math.toRadians(config.rotationSpeed * 3.2D * (1.0D - p));
+            for (int idx : order) {
+                if (departedAt[idx] != -1) continue;
+                Vec3d pos = ringPos(idx, slot);
+                items.get(idx).setPos(pos);
 
-                for (int idx : losers) {
-                    Vec3d pos = ringPos(idx, slot).add(0.0D, rise[idx] * e, 0.0D);
-                    items.get(idx).setPos(pos);
-
-                    if (nameStands[idx] != null) {
-                        nameStands[idx].setPos(pos.add(0.0D, config.nameOffset, 0.0D));
-                    }
-                }
-
-                Vec3d wpos = lerpVec(ringPos(winnerIdx, slot), top, smoothStep(p));
-                winnerItem.setPos(wpos);
-
-                if (nameStands[winnerIdx] != null) {
-                    nameStands[winnerIdx].setPos(wpos.add(0.0D, config.nameOffset, 0.0D));
+                if (nameStands[idx] != null) {
+                    nameStands[idx].setPos(pos.add(0.0D, config.nameOffset, 0.0D));
                 }
             }
 
-            if (t >= vanishStart && t <= flyTicks) {
-                for (int r = 0; r < vanishPerTick && !losers.isEmpty(); r++) {
-                    int idx = losers.remove(0);
-                    VirtualEntity loser = items.get(idx);
-                    Vec3d lp = loser.getPos();
-                    poof(lp == null ? null : lp.add(0.0D, displayY, 0.0D));
-                    removeAndForget(loser);
+            if (t < winnerStart) {
+                Vec3d wp = ringPos(winnerIdx, slot);
+                winnerItem.setPos(wp);
+
+                if (nameStands[winnerIdx] != null) {
+                    nameStands[winnerIdx].setPos(wp.add(0.0D, config.nameOffset, 0.0D));
+                }
+            }
+
+            for (int k = 0; k < order.size(); k++) {
+                int idx = order.get(k);
+                if (departedAt[idx] != -1 || t < k / perTick) continue;
+
+                departedAt[idx] = t;
+                Vec3d sp = items.get(idx).getPos();
+                startPos[idx] = sp == null ? ringPos(idx, slot) : sp;
+
+                double rx = startPos[idx].x - ringCenter.x;
+                double rz = startPos[idx].z - ringCenter.z;
+                double rl = Math.sqrt(rx * rx + rz * rz);
+                if (rl < 0.001D) {
+                    rx = Math.cos(slot[idx]);
+                    rz = Math.sin(slot[idx]);
+                    rl = 1.0D;
+                }
+                dirX[idx] = rx / rl;
+                dirZ[idx] = rz / rl;
+            }
+
+            for (int idx : order) {
+                int d0 = departedAt[idx];
+                if (d0 == -1) continue;
+                int dt = t - d0;
+                if (dt > flightTicks) continue;
+
+                double e = smoothStep((double) dt / flightTicks);
+                Vec3d pos = startPos[idx].add(dirX[idx] * 1.7D * e, 2.6D * e, dirZ[idx] * 1.7D * e);
+                items.get(idx).setPos(pos);
+
+                if (nameStands[idx] != null) {
+                    nameStands[idx].setPos(pos.add(0.0D, config.nameOffset, 0.0D));
+                }
+
+                if (dt == flightTicks) {
+                    poof(pos.add(0.0D, displayY, 0.0D));
+                    removeAndForget(items.get(idx));
 
                     if (nameStands[idx] != null) {
                         removeAndForget(nameStands[idx]);
@@ -350,13 +388,23 @@ public class SphereAnimator extends AbstractAnimation {
                 }
             }
 
+            if (t >= winnerStart && t < revealTick) {
+                double wp = smoothStep((double) (t - winnerStart) / winnerFly);
+                Vec3d wpos = lerpVec(ringPos(winnerIdx, slot), top, wp);
+                winnerItem.setPos(wpos);
+
+                if (nameStands[winnerIdx] != null) {
+                    nameStands[winnerIdx].setPos(wpos.add(0.0D, config.nameOffset, 0.0D));
+                }
+            }
+
             if (t == revealTick) {
                 playSound(top, winSound, 0.8F, 1.0F);
                 burst(showTop);
             }
 
-            if (t > flyTicks) {
-                int bt = t - flyTicks;
+            if (t > revealTick) {
+                int bt = t - revealTick;
                 double ramp = Math.min(1.0D, bt / 6.0D);
                 double bob = 0.1D * Math.sin(0.13D * bt) * ramp;
                 Vec3d wpos = top.add(0.0D, bob, 0.0D);
