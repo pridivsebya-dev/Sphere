@@ -303,9 +303,8 @@ public class SphereAnimator extends AbstractAnimation {
             order.add((winnerIdx + k) % count);
         }
 
-        int perTick = count > 12 ? 3 : (count > 6 ? 2 : 1);
         int flightTicks = 7;
-        int lastDepart = (order.size() - 1) / perTick;
+        int lastDepart = order.size() - 1;
         int lastVanish = lastDepart + flightTicks;
         int winnerStart = lastVanish + 2;
         int winnerFly = 6;
@@ -321,7 +320,7 @@ public class SphereAnimator extends AbstractAnimation {
 
         for (int t = 0; t < ticks; t++) {
             double spin = config.rotationSpeed * Math.max(0.15D,
-                    3.2D - 3.05D * Math.min(1.0D, (double) t / Math.max(1, lastVanish)));
+                    3.2D - 3.05D * Math.min(1.0D, (double) t / Math.max(1, lastDepart)));
             orbitAngle += Math.toRadians(spin);
 
             for (int idx : order) {
@@ -345,7 +344,7 @@ public class SphereAnimator extends AbstractAnimation {
 
             for (int k = 0; k < order.size(); k++) {
                 int idx = order.get(k);
-                if (departedAt[idx] != -1 || t < k / perTick) continue;
+                if (departedAt[idx] != -1 || t < k) continue;
 
                 departedAt[idx] = t;
                 Vec3d sp = items.get(idx).getPos();
