@@ -187,7 +187,7 @@ public class SphereAnimator extends AbstractAnimation {
         int gap = config.timings.ascentGap;
         int total = (count - 1) * gap + steps + 1;
 
-        Vec3d hidden = center.add(0.0D, -6.0D, 0.0D);
+        Vec3d hidden = center.add(0.0D, 6.5D, 0.0D);
 
         int[] progress = new int[count];
         VirtualEntity[] spawned = new VirtualEntity[count];
@@ -218,10 +218,10 @@ public class SphereAnimator extends AbstractAnimation {
                 int s = progress[i] - 1;
                 if (s < 1 || s > steps) continue;
 
-                double k = smoothStep((double) s / steps);
-                double ang = slot[i] - 0.9D * (1.0D - k);
-                double r = config.radius * k;
-                double y = config.height * k + 0.1D * Math.sin(Math.PI * k);
+                double f = 1.0D - smoothStep((double) s / steps);
+                double ang = slot[i] + 0.8D * f;
+                double r = config.radius * (1.0D - 0.35D * f);
+                double y = config.height + 2.8D * f;
 
                 Vec3d pos = new Vec3d(
                         center.x + Math.cos(ang) * r,
@@ -300,6 +300,8 @@ public class SphereAnimator extends AbstractAnimation {
         }
 
         Vec3d top = ringCenter.add(0.0D, -0.3D, 0.0D);
+        double displayY = config.standMode ? 1.0D : 0.0D;
+        Vec3d showTop = top.add(0.0D, displayY, 0.0D);
         List<Integer> losers = new ArrayList<>();
         for (int i = 0; i < count; i++) {
             if (i != winnerIdx) losers.add(i);
@@ -332,7 +334,8 @@ public class SphereAnimator extends AbstractAnimation {
                 for (int r = 0; r < removalsPerTick && !losers.isEmpty(); r++) {
                     int idx = losers.remove(0);
                     VirtualEntity loser = items.get(idx);
-                    poof(loser.getPos());
+                    Vec3d lp = loser.getPos();
+                    poof(lp == null ? null : lp.add(0.0D, displayY, 0.0D));
                     removeAndForget(loser);
 
                     if (nameStands[idx] != null) {
@@ -344,7 +347,7 @@ public class SphereAnimator extends AbstractAnimation {
 
             if (t == removalStart + 2) {
                 playSound(top, winSound, 0.8F, 1.0F);
-                burst(top);
+                burst(showTop);
             }
 
             if (t > gatherTicks) {
@@ -357,7 +360,7 @@ public class SphereAnimator extends AbstractAnimation {
                 if (nameStands[winnerIdx] != null) {
                     nameStands[winnerIdx].setPos(wpos.add(0.0D, config.nameOffset, 0.0D));
                 }
-                drawSwirl(top);
+                drawSwirl(showTop);
             }
 
             sleepTicks(1L);
