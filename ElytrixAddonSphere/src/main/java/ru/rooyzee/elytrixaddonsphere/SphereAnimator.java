@@ -305,10 +305,10 @@ public class SphereAnimator extends AbstractAnimation {
 
         int flightTicks = 7;
         int lastDepart = order.size() - 1;
-        int lastVanish = lastDepart + flightTicks;
-        int winnerStart = lastVanish + 2;
-        int winnerFly = 6;
-        int revealTick = winnerStart + winnerFly;
+        int winnerFly = 9;
+        int revealTick = winnerFly + 1;
+
+        Vec3d wStart = ringPos(winnerIdx, slot);
 
         Vec3d[] startPos = new Vec3d[count];
         double[] dirX = new double[count];
@@ -333,12 +333,13 @@ public class SphereAnimator extends AbstractAnimation {
                 }
             }
 
-            if (t < winnerStart) {
-                Vec3d wp = ringPos(winnerIdx, slot);
-                winnerItem.setPos(wp);
+            if (t <= winnerFly) {
+                double s = smoothStep((double) t / winnerFly);
+                Vec3d wpos = lerpVec(wStart, top, s).add(0.0D, 0.4D * Math.sin(Math.PI * s), 0.0D);
+                winnerItem.setPos(wpos);
 
                 if (nameStands[winnerIdx] != null) {
-                    nameStands[winnerIdx].setPos(wp.add(0.0D, config.nameOffset, 0.0D));
+                    nameStands[winnerIdx].setPos(wpos.add(0.0D, config.nameOffset, 0.0D));
                 }
             }
 
@@ -384,16 +385,6 @@ public class SphereAnimator extends AbstractAnimation {
                         removeAndForget(nameStands[idx]);
                         nameStands[idx] = null;
                     }
-                }
-            }
-
-            if (t >= winnerStart && t < revealTick) {
-                double wp = smoothStep((double) (t - winnerStart) / winnerFly);
-                Vec3d wpos = lerpVec(ringPos(winnerIdx, slot), top, wp);
-                winnerItem.setPos(wpos);
-
-                if (nameStands[winnerIdx] != null) {
-                    nameStands[winnerIdx].setPos(wpos.add(0.0D, config.nameOffset, 0.0D));
                 }
             }
 
@@ -617,7 +608,7 @@ public class SphereAnimator extends AbstractAnimation {
         public static final Codec<Timings> CODEC = RecordCodecBuilder.create(i -> i.group(
                 Codec.INT.optionalFieldOf("ascentSteps", 5).forGetter(v -> v.ascentSteps),
                 Codec.INT.optionalFieldOf("ascentGap", 2).forGetter(v -> v.ascentGap),
-                Codec.INT.optionalFieldOf("orbitTicks", 150).forGetter(v -> v.orbitTicks),
+                Codec.INT.optionalFieldOf("orbitTicks", 100).forGetter(v -> v.orbitTicks),
                 Codec.INT.optionalFieldOf("convergenceTicks", 40).forGetter(v -> v.convergenceTicks),
                 Codec.INT.optionalFieldOf("winnerTicks", 45).forGetter(v -> v.winnerTicks),
                 Codec.STRING.optionalFieldOf("spawnSound", "BLOCK_NOTE_BLOCK_PLING").forGetter(v -> v.spawnSound),
@@ -644,7 +635,7 @@ public class SphereAnimator extends AbstractAnimation {
         }
 
         Timings() {
-            this(5, 2, 150, 40, 45, "BLOCK_NOTE_BLOCK_PLING", "ENTITY_PLAYER_LEVELUP");
+            this(5, 2, 100, 40, 45, "BLOCK_NOTE_BLOCK_PLING", "ENTITY_PLAYER_LEVELUP");
         }
 
         private static double clamp(double v, double min, double max) {

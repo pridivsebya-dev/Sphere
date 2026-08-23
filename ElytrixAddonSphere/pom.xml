@@ -6,7 +6,7 @@
 
     <groupId>ru.rooyzee</groupId>
     <artifactId>ElytrixAnimAddon</artifactId>
-    <version>1.22</version>
+    <version>1.23</version>
     <packaging>jar</packaging>
 
     <name>ElytrixAnimAddon</name>
@@ -101,7 +101,7 @@
     </dependencies>
 
     <build>
-        <finalName>${project.artifactId}-${project.version}</finalName>
+        <finalName>${project.artifactId}</finalName>
 
         <resources>
             <resource>
