@@ -9,6 +9,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.util.logging.Level;
 
 public final class Main extends AbstractAddon {
 
@@ -20,6 +21,7 @@ public final class Main extends AbstractAddon {
     public void onEnable() {
         AnimationRegistry.INSTANCE.register(ANIMATION_KEY, SphereAnimator::new);
         saveDefaultAnimationFile();
+        getPlugin().getLogger().info("Анимация " + ANIMATION_KEY + " зарегистрирована");
     }
 
     @Override
@@ -29,24 +31,24 @@ public final class Main extends AbstractAddon {
 
     private void saveDefaultAnimationFile() {
         Plugin plugin = getPlugin();
-        File dir = new File(plugin.getDataFolder(), TARGET_DIR);
+        try {
+            File dir = new File(plugin.getDataFolder(), TARGET_DIR);
+            Files.createDirectories(dir.toPath());
 
-        if (!dir.exists() && !dir.mkdirs()) {
-            throw new IllegalStateException("Не удалось создать папку: " + dir.getAbsolutePath());
-        }
-
-        File targetFile = new File(dir, RESOURCE_NAME);
-        if (targetFile.exists()) {
-            return;
-        }
-
-        try (InputStream in = getResource(RESOURCE_NAME)) {
-            if (in == null) {
-                throw new IllegalStateException("Ресурс " + RESOURCE_NAME + " не найден внутри jar!");
+            File targetFile = new File(dir, RESOURCE_NAME);
+            if (targetFile.exists()) {
+                return;
             }
-            Files.copy(in, targetFile.toPath());
+
+            try (InputStream in = getResource(RESOURCE_NAME)) {
+                if (in == null) {
+                    plugin.getLogger().warning("Ресурс " + RESOURCE_NAME + " не найден внутри jar!");
+                    return;
+                }
+                Files.copy(in, targetFile.toPath());
+            }
         } catch (IOException e) {
-            throw new RuntimeException("Не удалось сохранить " + RESOURCE_NAME, e);
+            plugin.getLogger().log(Level.WARNING, "Не удалось сохранить " + RESOURCE_NAME, e);
         }
     }
 }
